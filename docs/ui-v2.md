@@ -1,6 +1,10 @@
-# UI v2 (0.2.0)
+# UI v2 (2.0.0)
 
-本版本仅更新展示层，基于已经确认的“结果优先 / 精简字段”界面。
+本版本位于独立仓库 `joyzhou123123/ai-compute-advisor_V2`，默认分支为 `main`。
+
+[中文在线版](https://joyzhou123123.github.io/ai-compute-advisor_V2/?lang=zh) · [English](https://joyzhou123123.github.io/ai-compute-advisor_V2/?lang=en)
+
+本版本仅更新展示层，基于已经确认的“结果优先 / 精简字段”浅色界面。
 
 - 默认进入硬件找模型：容量候选、条件不满足分组；按显存需求或参数规模排序。
 - 两个选型流程均每页展示 5 条结果；模型库、设备库每页展示 8 条。
