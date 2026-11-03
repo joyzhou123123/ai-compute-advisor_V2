@@ -723,7 +723,7 @@ button:disabled {
   width: auto;
 }
 #advisor-full .af-brand::after {
-  content: "v2.0";
+  content: "v2.1";
   font-size: 11px;
   font-weight: 400;
   color: var(--af-muted);
@@ -781,5 +781,196 @@ button:disabled {
   }
 }
 
-#advisor-full .af-mobile-table-hint{display:none}
-@media(max-width:600px){#advisor-full .af-mobile-table-hint{display:block;font-size:11px;color:var(--af-muted);margin:8px 0}}
+#advisor-full .af-mobile-table-hint {
+  display: none;
+}
+@media (max-width: 600px) {
+  #advisor-full .af-mobile-table-hint {
+    display: block;
+    font-size: 11px;
+    color: var(--af-muted);
+    margin: 8px 0;
+  }
+}
+
+/* V2.1 combination workflow: compact summaries, progressively disclosed detail. */
+.af-addrow {
+  display: flex;
+  align-items: end;
+  gap: 12px;
+  margin: 18px 0;
+}
+.af-addrow label {
+  display: grid;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+.af-addrow select {
+  width: 100%;
+}
+.af-request-list {
+  display: grid;
+  gap: 12px;
+  margin: 14px 0;
+}
+.af-request {
+  border: 1px solid var(--af-line, #dce2ea);
+  border-radius: 10px;
+  padding: 16px;
+  background: #fff;
+  min-width: 0;
+}
+.af-request-title,
+.af-fleet-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+}
+.af-request-title {
+  margin-bottom: 12px;
+}
+.af-request-fields {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+.af-request-fields label,
+.af-fleet-row label {
+  display: grid;
+  gap: 6px;
+  font-size: 12px;
+  color: #566176;
+}
+.af-request-fields input,
+.af-request-fields select,
+.af-fleet-row input {
+  width: 100%;
+  min-width: 0;
+}
+.af-fleet-row strong {
+  flex: 1;
+}
+.af-fleet-row small,
+.af-plan small {
+  display: block;
+  margin-top: 5px;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 400;
+}
+.af-fleet-row label {
+  width: 85px;
+  flex-shrink: 0;
+}
+.af-inline-detail {
+  margin-top: 10px;
+  font-size: 13px;
+}
+.af-inline-detail summary,
+details.af-group > summary {
+  cursor: pointer;
+  padding: 9px 0;
+  font-weight: 600;
+}
+.af-inline-detail dl {
+  margin-top: 12px;
+}
+.af-plan-list {
+  display: grid;
+  gap: 10px;
+}
+.af-plan {
+  border: 1px solid #dce2ea;
+  border-radius: 10px;
+  background: #fff;
+  margin-bottom: 10px;
+  overflow: hidden;
+}
+.af-plan > summary {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px;
+  cursor: pointer;
+  list-style: none;
+}
+.af-plan > summary::after {
+  content: "+";
+  font-size: 22px;
+  color: #64748b;
+}
+.af-plan[open] > summary::after {
+  content: "−";
+}
+.af-plan[open] > summary {
+  background: #f3f6fc;
+  border-bottom: 1px solid #dce2ea;
+}
+.af-plan-rank {
+  font-size: 17px;
+  font-weight: 700;
+  color: #4767a8;
+}
+.af-plan-name {
+  flex: 1;
+  min-width: 0;
+}
+.af-plan-name strong {
+  font-size: 13px;
+  line-height: 1.8;
+}
+.af-plan-stat {
+  text-align: right;
+  flex-shrink: 0;
+}
+.af-plan-body {
+  padding: 12px 16px;
+}
+.af-result-title {
+  flex-wrap: wrap;
+}
+.af-comparebar {
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.af-plan summary:focus-visible,
+.af-inline-detail summary:focus-visible {
+  outline: 3px solid #829ee7;
+  outline-offset: -3px;
+}
+@media (max-width: 600px) {
+  .af-request-fields {
+    grid-template-columns: 1fr;
+  }
+  .af-fleet-row {
+    flex-wrap: wrap;
+  }
+  .af-fleet-row strong {
+    flex-basis: 100%;
+  }
+  .af-fleet-row label {
+    flex: 1;
+  }
+  .af-plan > summary {
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 12px;
+  }
+  .af-plan-name {
+    flex-basis: 75%;
+  }
+  .af-plan-stat {
+    text-align: left;
+    margin-left: 28px;
+  }
+  .af-plan-body {
+    padding: 8px;
+  }
+  .af-addrow {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}

@@ -12,7 +12,13 @@ const source = readFileSync(
 const app = readFileSync(
   new URL("../public/ui-v2/app.js", import.meta.url),
   "utf8",
-).replace(/^import[\s\S]*?from "\.\/source\.js";\n/, "");
+)
+  .replace(/^import[\s\S]*?from "\.\/source\.js";\n/, "")
+  .replace(/^import .*from "\.\/combination-planner\.js";\n/m, "");
+const planner = readFileSync(
+  new URL("../public/ui-v2/combination-planner.js", import.meta.url),
+  "utf8",
+).replace(/^export /gm, "");
 
 function harness(search = "?lang=zh") {
   type Node = {
@@ -72,7 +78,7 @@ function harness(search = "?lang=zh") {
     },
     console,
   });
-  runInContext(source + "\n" + app, context);
+  runInContext(source + "\n" + planner + "\n" + app, context);
   const click = (dataset: Record<string, string>, id?: string) =>
     handlers.click({ target: { closest: () => ({ dataset, id }) } });
   const change = (field: string, value: string) =>
@@ -85,6 +91,14 @@ function harness(search = "?lang=zh") {
     change,
     context,
     location,
+    changeData: (
+      dataset: Record<string, string>,
+      value: string,
+      checked = false,
+    ) =>
+      handlers.change({
+        target: { dataset, value, checked, type: "select-one" },
+      }),
     content: () => node("#af-content").innerHTML,
   };
 }
@@ -137,19 +151,19 @@ describe("results-first interactions", () => {
   it("paginates and preserves the result page when returning from details", () => {
     const h = harness();
     expect((h.content().match(/data-pick=/g) || []).length).toBe(5);
-    expect(h.content()).toContain("1–5 / 17");
+    expect(h.content()).toMatch(/1–5 \/ \d+/);
     h.click({ turn: "1" });
     const id = h.content().match(/data-pick="(\d+)"/)![1];
     h.click({ resultDetail: id });
     expect(h.content()).toContain("返回第 2 页结果");
     h.click({ work: "results" });
-    expect(h.content()).toContain("6–10 / 17");
+    expect(h.content()).toMatch(/6–10 \/ \d+/);
   });
 
   it("keeps active inputs and switches language without resetting choices", () => {
     const h = harness();
     h.click({ work: "config" });
-    expect((h.content().match(/data-field=/g) || []).length).toBe(4);
+    expect(h.content()).toContain("data-fleet-count");
     h.click({ configGroup: "1" });
     expect((h.content().match(/data-field=/g) || []).length).toBe(4);
     h.change("context", "64");
@@ -159,7 +173,7 @@ describe("results-first interactions", () => {
     expect(h.location.search).toBe("?lang=en");
     h.click({ page: "model" });
     h.click({ modelTab: "config" });
-    expect((h.content().match(/data-field=/g) || []).length).toBe(5);
+    expect((h.content().match(/data-request=/g) || []).length).toBe(3);
     expect(h.content()).not.toContain("MiniMax H3");
   });
 
@@ -205,5 +219,86 @@ describe("results-first interactions", () => {
     );
     expect(result.need).toBeNull();
     expect(result.kv).toBeNull();
+  });
+});
+
+describe("V2.1 simultaneous deployment", () => {
+  it("keeps the browser planner in sync with the pure calculator", () => {
+    expect(() =>
+      execFileSync(process.execPath, [
+        "scripts/build-combination-planner.mjs",
+        "--check",
+      ]),
+    ).not.toThrow();
+  });
+  it("adds models, keeps independent parameters across language changes, and displays placements", () => {
+    const h = harness();
+    h.click({ page: "model" });
+    h.click({ modelTab: "config" });
+    h.node("#af-add-model").value = "0";
+    h.click({ add: "model" });
+    h.changeData({ request: "0", scope: "model", param: "concurrency" }, "3");
+    h.click({ lang: "en" });
+    expect(h.content()).toContain('id="af-model-0-concurrency"');
+    expect(
+      runInContext("state.requests.map(r=>[r.id,r.concurrency])", h.context),
+    ).toEqual([
+      ["15", 4],
+      ["0", 3],
+    ]);
+    h.click({ modelTab: "results" });
+    expect(h.content()).toContain("Model placement");
+    expect(h.content()).toContain("Qwen3 8B");
+    h.click({ comboMode: "compare" });
+    expect(h.content()).toContain("standalone plans");
+    h.click({ modelTab: "config" });
+    h.click({ removeModel: "0", scope: "model" });
+    expect(runInContext("state.requests.length", h.context)).toBe(1);
+  });
+  it("selects models across pages and allocates them within mixed inventory", () => {
+    const h = harness();
+    h.click({ work: "config" });
+    h.node("#af-add-device").value = "0";
+    h.click({ add: "device" });
+    h.changeData({ fleetCount: "0" }, "3");
+    h.click({ work: "results" });
+    for (const id of ["0", "1", "2", "5"]) h.changeData({ pick: id }, "", true);
+    expect(runInContext("state.selected.length", h.context)).toBe(4);
+    h.click({ work: "allocation" });
+    expect(h.content()).toContain("模型分配");
+    const plans = runInContext("state.planningResult.plans", h.context) as {
+      machines: {
+        deviceId: string;
+        models: string[];
+        used: number;
+        capacity: number;
+      }[];
+    }[];
+    expect(plans.length).toBeGreaterThan(0);
+    for (const p of plans) {
+      expect(p.machines.flatMap((m) => m.models).sort()).toEqual([
+        "0",
+        "1",
+        "2",
+        "5",
+      ]);
+      expect(
+        p.machines.filter((m) => m.deviceId === "1").length,
+      ).toBeLessThanOrEqual(2);
+      expect(
+        p.machines.filter((m) => m.deviceId === "0").length,
+      ).toBeLessThanOrEqual(3);
+      for (const m of p.machines)
+        expect(m.used).toBeLessThanOrEqual(m.capacity);
+    }
+    h.click({ removeModel: "0", scope: "hardware" });
+    expect(runInContext("state.selected.includes(0)", h.context)).toBe(false);
+  });
+  it("blocks combinations with unsupported per-model inputs", () => {
+    const h = harness();
+    h.click({ page: "model" });
+    h.changeData({ request: "15", scope: "model", param: "context" }, "999999");
+    expect(h.content()).toContain("暂不生成组合");
+    expect(h.content()).not.toContain("af-plan-body");
   });
 });

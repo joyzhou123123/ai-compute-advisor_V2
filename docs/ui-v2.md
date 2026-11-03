@@ -55,3 +55,32 @@ npm run preview
 保持相对路径，支持 GitHub Pages 仓库子路径部署；没有新后端或外部 API 依赖。
 
 根入口原本就是独立静态计算器，没有 Full Data Pack 导入按钮；此版本保留这个入口边界，不将未接入的管理操作添加到 UI。
+
+## V2.1 simultaneous placement
+
+- Model → hardware accepts multiple catalog models. Quantization, context and
+  concurrency belong to each selected model. Standard utilization uses the model
+  workspace setting; Fusion retains the original 95% rule.
+- Hardware → models accepts multiple hardware types, each with an integer count
+  (1–999). Candidate filtering is now based on the largest individual machine,
+  not pooled cross-machine VRAM. Models can be selected across result pages for
+  simultaneous placement; their per-model inputs can then be edited. Hardware
+  workloads retain the original 90% utilization (Fusion 95%). Parameter comparison
+  remains a separate 2–3 model view.
+- `src/calculator/combinationPlanner.ts` adds pure placement search on top of the
+  **unchanged** per-model memory calculation. Each model is indivisible and each
+  machine may host several models. Per-model headroom and rounding are retained
+  conservatively. Placement consumes only GPU capacity; runtime compatibility,
+  model throughput, interconnects, host RAM and SSD sufficiency are not certified.
+- The search tries increasing machine counts and then ranks found configurations
+  by unused capacity. It returns up to 30 distinct hardware multisets at the first
+  feasible machine count, with one valid placement per multiset. It is bounded at
+  50,000 search nodes; reaching that limit is explicitly shown and never treated
+  as proof that no feasible plan exists or that the result is globally optimal.
+- Cross-machine sharding is not inferred from added VRAM. The original standalone
+  plans (including the conditional cross-machine plan) remain available under
+  individual comparison. Device and model catalogs remain unchanged.
+- `npm run generate:planner` emits the browser module. `npm run verify:planner`
+  checks it against the TypeScript source and runs before builds.
+- Combination summaries paginate five per page; only the first placement is open
+  by default. Full model and hardware parameters remain available on demand.

@@ -1,6 +1,6 @@
 {
   "name": "ai-compute-advisor-v2",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "private": true,
   "type": "module",
   "engines": {
@@ -17,7 +17,9 @@
     "verify:data": "node scripts/verify-ui-data.mjs",
     "verify:source": "node scripts/extract-live-source.mjs --check",
     "generate:source": "node scripts/extract-live-source.mjs",
-    "prebuild": "npm run verify:source"
+    "prebuild": "npm run verify:source && npm run verify:planner",
+    "generate:planner": "node scripts/build-combination-planner.mjs",
+    "verify:planner": "node scripts/build-combination-planner.mjs --check"
   },
   "dependencies": {
     "lucide-react": "1.31.0",
