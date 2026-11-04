@@ -26,11 +26,11 @@ A static model and hardware capacity planner with a results-first, fixed light i
 4. In **Model → hardware**, add models and find simultaneous deployment combinations, or switch to individual comparison.
 5. In **Hardware → models**, add hardware types and counts, then select models across pages and choose **Assess simultaneous deployment**. Parameter comparison remains available for 2–3 models.
 
-Capacity estimates are not guarantees of throughput or runtime compatibility. TOPS remains hardware metadata, not LLM tokens per second. The included performance entries are directional estimates, not model-bound measurements.
+Capacity estimates are not guarantees of throughput or runtime compatibility. TOPS remains hardware metadata, not LLM tokens per second. The performance library distinguishes upstream measurements for named models from directional estimates.
 
 ## Original data preserved
 
-The source calculator contains **22 model records, 9 device configurations and 10 deployment plans**. All records and missing values are preserved; 21 models have sufficient KV data for capacity estimation. The earlier design prototype's separate 26-device snapshot is not imported.
+The source calculator contains **22 model records, 26 device configurations and 27 deployment plans**. All records and missing values are preserved; 21 models have sufficient KV data for capacity estimation. The catalog is pinned to [upstream 4181077](https://github.com/Johnguo0915/ai-compute-advisor/commit/4181077bfe1aa040b50235f1323fc72c98a91ae3). Open **Source data & metadata** to browse all nine bundled Data Pack tables and their original JSON.
 
 - `public/live-deployment-calculator.html`: unchanged original calculator and its embedded catalog.
 - `public/data/*.json`: unchanged complete bundled Data Pack catalogs.

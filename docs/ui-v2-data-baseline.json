@@ -1,8 +1,8 @@
 {
-  "baseCommit": "7f68e2e137b4af6fe34db91b6d080e2c64b95244",
-  "description": "UI v2 baseline: original calculator, complete bundled data and calculation modules are byte-identical.",
+  "baseCommit": "4181077bfe1aa040b50235f1323fc72c98a91ae3",
+  "description": "Upstream calculator, complete bundled catalogs and original calculation modules from Johnguo0915/ai-compute-advisor.",
   "sha256": {
-    "public/live-deployment-calculator.html": "33c43d85c01baa7f2cdfddcfbca02ff4d40c6b3d7de64c73ee0b45057407c04a",
+    "public/live-deployment-calculator.html": "793586df2cac87d548e64348f6d7de68e66f76c3a65db478de95e4e0f5cec497",
     "public/data/assumptions.json": "fb0dce79cb458b94137466fd454743f18e82d4c00ea355a813838c2d3ddd6385",
     "public/data/cloud-pricing.json": "0c4e78099bf6d33f62196e964df53ae9a6aef4a5703484886738c7a6c4ffa94d",
     "public/data/exchange-rates.json": "b0df8c0aa405060cd46b1fbe0fdc12826c39cfb55839e700bd145af21962c253",

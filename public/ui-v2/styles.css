@@ -974,3 +974,5 @@ details.af-group > summary {
     flex-direction: column;
   }
 }
+
+.af-raw-value { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; margin: 0; }

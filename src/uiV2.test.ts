@@ -69,6 +69,19 @@ function harness(search = "?lang=zh") {
       activeElement: null,
     },
     window,
+    fetch: async (path: string) => ({
+      ok: true,
+      json: async () =>
+        JSON.parse(
+          readFileSync(
+            new URL(
+              path.replace("../data/", "../public/data/"),
+              import.meta.url,
+            ),
+            "utf8",
+          ),
+        ),
+    }),
     history,
     location,
     URL,
@@ -120,7 +133,7 @@ describe("UI v2 preserves the original data and calculator", () => {
         "[catalog.M.length,catalog.H.length,catalog.P.length]",
         context,
       ),
-    ).toEqual([22, 9, 10]);
+    ).toEqual([22, 26, 27]);
     expect(
       runInContext(
         "Number.isNaN(catalog.M.find(m=>m[0]==='MiniMax H3 33B')[2])",
@@ -206,7 +219,7 @@ describe("results-first interactions", () => {
     expect(h.content()).toContain("17–22 / 22");
     h.click({ page: "devices" });
     h.click({ catalogTurn: "1" });
-    expect(h.content()).toContain("9–9 / 9");
+    expect(h.content()).toContain("9–16 / 26");
   });
 
   it("separates incompatible contexts and prevents missing data from becoming zero", () => {
@@ -300,5 +313,50 @@ describe("V2.1 simultaneous deployment", () => {
     h.changeData({ request: "15", scope: "model", param: "context" }, "999999");
     expect(h.content()).toContain("暂不生成组合");
     expect(h.content()).not.toContain("af-plan-body");
+  });
+});
+
+describe("upstream metadata restoration", () => {
+  it("uses upstream named-model measurements and excludes dual-card extrapolation", () => {
+    const h = harness();
+    expect(runInContext("speed(catalog.H[9], catalog.M[7])", h.context)).toBe(
+      "60–70",
+    );
+    expect(runInContext("speed(catalog.H[10], catalog.M[7])", h.context)).toBe(
+      "约 50",
+    );
+    expect(
+      runInContext("speed(catalog.H[12], catalog.M[7])", h.context),
+    ).toBeNull();
+    expect(
+      runInContext("speed(catalog.H[9], catalog.M[0])", h.context),
+    ).toBeNull();
+    h.click({ page: "performance" });
+    expect(h.content()).toContain("指定模型有实测");
+    h.node("#af-filter").value = "measured";
+    h.node("#af-family").value = "all";
+    h.click({}, "af-apply");
+    expect(h.content()).toContain("11/26");
+  });
+  it("allows each original Data Pack catalog to be browsed via the UI", async () => {
+    const h = harness();
+    h.click({ page: "metadata" });
+    const ids = runInContext(
+      "Object.keys(packManifest.catalogs)",
+      h.context,
+    ) as string[];
+    expect(ids).toHaveLength(9);
+    for (const id of ids) {
+      h.changeData({ packSelect: "1" }, id);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(h.content()).toContain("原始记录字段");
+      expect(h.content()).toContain("打开完整原始 JSON");
+      expect(h.content()).toContain("lastUpdated");
+      expect(h.content()).not.toContain("undefined");
+    }
+    h.changeData({ packSelect: "1" }, "models");
+    h.changeData({ recordSelect: "1" }, "1");
+    expect(h.content()).toContain("qwen3-8b");
+    expect(h.content()).toContain("maxOutputTokens");
   });
 });

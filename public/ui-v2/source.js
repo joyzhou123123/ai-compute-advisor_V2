@@ -1,5 +1,5 @@
 // Generated from public/live-deployment-calculator.html. Do not edit.
-// Source SHA-256: 33c43d85c01baa7f2cdfddcfbca02ff4d40c6b3d7de64c73ee0b45057407c04a
+// Source SHA-256: 793586df2cac87d548e64348f6d7de68e66f76c3a65db478de95e4e0f5cec497
 const M = [
         [
           "Qwen3 8B",
@@ -154,9 +154,26 @@ const H = [
         ["ThinkCentre X Tower · RTX PRO 5000 72GB", 72, 35, [1344, 2064, "FP4 Tensor Core vendor peak", 300], "https://www.nvidia.com/en-us/products/workstations/professional-desktop-gpus/rtx-pro-5000/"],
         ["ThinkCentre X Tower · 双 RTX PRO 5000 72GB", 144, 55, [1344, 2064, "FP4 Tensor Core vendor peak", 300], "https://www.nvidia.com/en-us/products/workstations/professional-desktop-gpus/rtx-pro-5000/"],
         ["ThinkCentre X Ultra · 总计 128GB，可分配 96GB 给 GPU", 96, 20, [273, 55, "NPU TOPS", null]],
+        ["TSK-C4 · RTX 5060 Ti 16GB", 16, 14, [448, 759, "FP4 Tensor Core vendor peak", 180], "https://www.nvidia.com/en-us/geforce/graphics-cards/50-series/rtx-5060-family/"],
+        ["TSK-C4 · Radeon RX 9060 XT 16GB", 16, null, [320, 205, "INT8 matrix vendor peak", 160], "https://www.amd.com/en/products/graphics/desktops/radeon/9000-series/amd-radeon-rx-9060xt.html"],
+        ["ThinkCentre X Tower Gen2 · RTX 5060 Ti 16GB", 16, 14, [448, 759, "FP4 Tensor Core vendor peak", 180], "https://www.nvidia.com/en-us/geforce/graphics-cards/50-series/rtx-5060-family/"],
+        ["ThinkCentre X Tower Gen2 · 双 RTX 5060 Ti 16GB", 32, 20, [448, 759, "FP4 Tensor Core vendor peak", 180], "https://www.nvidia.com/en-us/geforce/graphics-cards/50-series/rtx-5060-family/"],
+        ["ThinkCentre X Tower Gen2 · RTX 5080 16GB", 16, 18, [960, 1801, "FP4 Tensor Core vendor peak", 360], "https://www.nvidia.com/en-us/geforce/graphics-cards/50-series/rtx-5080/"],
+        ["ThinkCentre X Tower Gen2 · RTX 5090 32GB", 32, 27, [1792, 3352, "FP4 Tensor Core vendor peak", 575], "https://www.nvidia.com/en-us/geforce/graphics-cards/50-series/rtx-5090/"],
+        ["ThinkCentre X Tower Gen2 · RTX PRO 5000 48GB", 48, 28, [1344, 2064, "FP4 Tensor Core vendor peak", 300], "https://www.nvidia.com/en-us/products/workstations/professional-desktop-gpus/rtx-pro-5000/"],
+        ["ThinkCentre X Tower Gen2 · 双 RTX PRO 5000 48GB", 96, 42, [1344, 2064, "FP4 Tensor Core vendor peak", 300], "https://www.nvidia.com/en-us/products/workstations/professional-desktop-gpus/rtx-pro-5000/"],
+        ["ThinkCentre X Tower Gen2 · RTX PRO 5000 72GB", 72, 35, [1344, 2064, "FP4 Tensor Core vendor peak", 300], "https://www.nvidia.com/en-us/products/workstations/professional-desktop-gpus/rtx-pro-5000/"],
+        ["ThinkCentre X Tower Gen2 · 双 RTX PRO 5000 72GB", 144, 55, [1344, 2064, "FP4 Tensor Core vendor peak", 300], "https://www.nvidia.com/en-us/products/workstations/professional-desktop-gpus/rtx-pro-5000/"],
+        ["M90a Pro Gen7（AIO） · Radeon RX 9060 XT 16GB", 16, null, [320, 205, "INT8 matrix vendor peak", 160], "https://www.amd.com/en/products/graphics/desktops/radeon/9000-series/amd-radeon-rx-9060xt.html"],
+        ["M90ts Gen7 · RTX 5060 Ti 16GB", 16, 14, [448, 759, "FP4 Tensor Core vendor peak", 180], "https://www.nvidia.com/en-us/geforce/graphics-cards/50-series/rtx-5060-family/"],
+        ["M90ts Gen7 · Radeon RX 9060 XT 16GB", 16, null, [320, 205, "INT8 matrix vendor peak", 160], "https://www.amd.com/en/products/graphics/desktops/radeon/9000-series/amd-radeon-rx-9060xt.html"],
+        ["M90q Gen7 · RTX 5060 Ti 16GB", 16, 14, [448, 759, "FP4 Tensor Core vendor peak", 180], "https://www.nvidia.com/en-us/geforce/graphics-cards/50-series/rtx-5060-family/"],
+        ["M90q Gen7 · Radeon RX 9060 XT 16GB", 16, null, [320, 205, "INT8 matrix vendor peak", 160], "https://www.amd.com/en/products/graphics/desktops/radeon/9000-series/amd-radeon-rx-9060xt.html"],
+        ["TSK-C5 · RTX 5060 Ti 16GB", 16, 14, [448, 759, "FP4 Tensor Core vendor peak", 180], "https://www.nvidia.com/en-us/geforce/graphics-cards/50-series/rtx-5060-family/"],
+        ["TSK-C5 · Radeon RX 9060 XT 16GB", 16, null, [320, 205, "INT8 matrix vendor peak", 160], "https://www.amd.com/en/products/graphics/desktops/radeon/9000-series/amd-radeon-rx-9060xt.html"],
       ];
 const P = [
-        ["1 × ThinkCentre X Tower · RTX 5060 Ti 16GB", 16, 14, 1, 1, "单机单卡", null, null, null, "性能资料待压测"],
+        ["1 × ThinkCentre X Tower · RTX 5060 Ti 16GB", 16, 14, 1, 1, "单机单卡", null, null, null, "Gemma 4 26B 与 35B A3B 实测 60–70 Token/秒；其他模型性能资料待压测"],
         ["1 × ThinkCentre X Tower · 双 RTX 5060 Ti 16GB", 32, 20, 1, 2, "单机双卡分片", null, null, null, "双卡分片与性能资料待压测"],
         ["2 × ThinkCentre X Tower · 各 1 × RTX 5060 Ti 16GB", 32, 16, 2, 2, "跨设备分片，需验证运行时", null, null, null, "需验证多机互联、网络与分布式运行时"],
         ["1 × ThinkCentre X Tower · RTX 5080 16GB", 16, 18, 1, 1, "单机单卡", null, null, null, "性能资料待压测"],
@@ -166,7 +183,36 @@ const P = [
         ["1 × ThinkCentre X Tower · RTX PRO 5000 72GB", 72, 35, 1, 1, "单机单卡", null, null, null, "性能资料待压测"],
         ["1 × ThinkCentre X Tower · 双 RTX PRO 5000 72GB", 144, 55, 1, 2, "单机双卡分片", null, null, null, "双卡分片与性能资料待压测"],
         ["1 × ThinkCentre X Ultra · 总计 128GB，可分配 96GB 给 GPU", 96, 20, 1, 1, "统一内存", null, null, null, "统一内存分配与性能资料待压测"],
+        ["1 × TSK-C4 · RTX 5060 Ti 16GB", 16, 14, 1, 1, "单机单卡", null, null, null, "支持 AI Fusion 2.0；Gemma 4 26B 与 35B A3B 实测 60–70 Token/秒"],
+        ["1 × TSK-C4 · Radeon RX 9060 XT 16GB", 16, null, 1, 1, "单机单卡", null, null, null, "支持 AI Fusion 2.0；Gemma 4 26B 与 35B A3B 实测约 50 Token/秒"],
+        ["1 × ThinkCentre X Tower Gen2 · RTX 5060 Ti 16GB", 16, 14, 1, 1, "单机单卡", null, null, null, "支持 AI Fusion 2.0；Gemma 4 26B 与 35B A3B 实测 60–70 Token/秒"],
+        ["1 × ThinkCentre X Tower Gen2 · 双 RTX 5060 Ti 16GB", 32, 20, 1, 2, "单机双卡分片", null, null, null, "支持 AI Fusion 2.0；双卡分片与性能资料待压测"],
+        ["1 × ThinkCentre X Tower Gen2 · RTX 5080 16GB", 16, 18, 1, 1, "单机单卡", null, null, null, "支持 AI Fusion 2.0；性能资料待压测"],
+        ["1 × ThinkCentre X Tower Gen2 · RTX 5090 32GB", 32, 27, 1, 1, "单机单卡", null, null, null, "支持 AI Fusion 2.0；性能资料待压测"],
+        ["1 × ThinkCentre X Tower Gen2 · RTX PRO 5000 48GB", 48, 28, 1, 1, "单机单卡", null, null, null, "支持 AI Fusion 2.0；性能资料待压测"],
+        ["1 × ThinkCentre X Tower Gen2 · 双 RTX PRO 5000 48GB", 96, 42, 1, 2, "单机双卡分片", null, null, null, "支持 AI Fusion 2.0；双卡分片与性能资料待压测"],
+        ["1 × ThinkCentre X Tower Gen2 · RTX PRO 5000 72GB", 72, 35, 1, 1, "单机单卡", null, null, null, "支持 AI Fusion 2.0；性能资料待压测"],
+        ["1 × ThinkCentre X Tower Gen2 · 双 RTX PRO 5000 72GB", 144, 55, 1, 2, "单机双卡分片", null, null, null, "支持 AI Fusion 2.0；双卡分片与性能资料待压测"],
+        ["1 × M90a Pro Gen7（AIO） · Radeon RX 9060 XT 16GB", 16, null, 1, 1, "单机单卡", null, null, null, "支持 AI Fusion 2.0；Gemma 4 26B 与 35B A3B 实测约 50 Token/秒"],
+        ["1 × M90ts Gen7 · RTX 5060 Ti 16GB", 16, 14, 1, 1, "单机单卡", null, null, null, "支持 AI Fusion 2.0；Gemma 4 26B 与 35B A3B 实测 60–70 Token/秒"],
+        ["1 × M90ts Gen7 · Radeon RX 9060 XT 16GB", 16, null, 1, 1, "单机单卡", null, null, null, "支持 AI Fusion 2.0；Gemma 4 26B 与 35B A3B 实测约 50 Token/秒"],
+        ["1 × M90q Gen7 · RTX 5060 Ti 16GB", 16, 14, 1, 1, "单机单卡", null, null, null, "支持 AI Fusion 2.0；Gemma 4 26B 与 35B A3B 实测 60–70 Token/秒"],
+        ["1 × M90q Gen7 · Radeon RX 9060 XT 16GB", 16, null, 1, 1, "单机单卡", null, null, null, "支持 AI Fusion 2.0；Gemma 4 26B 与 35B A3B 实测约 50 Token/秒"],
+        ["1 × TSK-C5 · RTX 5060 Ti 16GB", 16, 14, 1, 1, "单机单卡", null, null, null, "支持 AI Fusion 2.0；Gemma 4 26B 与 35B A3B 实测 60–70 Token/秒"],
+        ["1 × TSK-C5 · Radeon RX 9060 XT 16GB", 16, null, 1, 1, "单机单卡", null, null, null, "支持 AI Fusion 2.0；Gemma 4 26B 与 35B A3B 实测约 50 Token/秒"],
       ];
+function isMeasuredModel(name) {
+        const value = String(name);
+        return value.indexOf("Gemma 4 26B") >= 0 || value.indexOf("35B A3B") >= 0;
+      }
+function measuredChatSpeed(deviceName, modelName) {
+        if (modelName && !isMeasuredModel(modelName)) return null;
+        const name = String(deviceName);
+        if (name.indexOf("双") >= 0 || name.indexOf("各 1") >= 0) return null;
+        if (name.indexOf("5060 Ti") >= 0) return { low: 60, high: 70, text: "60–70" };
+        if (name.indexOf("9060 XT") >= 0) return { low: 50, high: 50, text: "50" };
+        return null;
+      }
 function matchesCapability(name, capability) {
         if (capability === "all") return true;
         const value = name.toLowerCase();
@@ -201,7 +247,8 @@ function fusionUtilization(m, fallback) {
         return isAiFusion2(m) ? 0.95 : fallback;
       }
 export const catalog = { M, H, P };
-export { matchesCapability, isAiFusion2, canPostTrain };
+export const packManifest = {"schemaVersion":1,"dataVersion":"2026.09-sample.15","lastUpdated":"2026-09-22","catalogs":{"models":"models.json","modelBenchmarks":"model-benchmarks.json","gpus":"gpus.json","inferenceProfiles":"inference-profiles.json","cloudPricing":"cloud-pricing.json","assumptions":"assumptions.json","presets":"presets.json","systems":"systems.json","exchangeRates":"exchange-rates.json"}};
+export { measuredChatSpeed, matchesCapability, isAiFusion2, canPostTrain };
 
 export function calculateModelMemory(m, bits, contextK, con, utilizationPercent) {
   const ctx = contextK * 1024;

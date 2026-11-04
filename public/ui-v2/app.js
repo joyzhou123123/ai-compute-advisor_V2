@@ -1,5 +1,7 @@
 import {
   catalog,
+  measuredChatSpeed,
+  packManifest,
   inspectMemory,
   capacityFor,
   modelPlans,
@@ -85,6 +87,7 @@ const pages = [
   ["models", "模型库", "Model library", catalog.M.length],
   ["devices", "设备库", "Device library", catalog.H.length],
   ["performance", "性能资料库", "Performance library", catalog.H.length],
+  ["metadata", "源数据与元数据", "Source data & metadata", null],
 ];
 const options = {
   device: () =>
@@ -264,9 +267,26 @@ function memory(m, mode = "hardware") {
     mode === "model" ? +v.util : 90,
   );
 }
-// The fork has directional estimates but no model-bound measurements.
-function speed() {
-  return null;
+function speed(h, m) {
+  const record = measuredChatSpeed(h[0], m?.[0]);
+  if (!record) return null;
+  return (record.low === record.high ? T("约 ", "≈") : "") + record.text;
+}
+function fleetMeasurements(m) {
+  return state.fleet.flatMap((f) => {
+    const h = catalog.H[+f.id],
+      value = speed(h, m);
+    return value ? [esc(devName(h[0])) + " · " + value + " Token/s"] : [];
+  });
+}
+function planMode(p) {
+  const modes = {
+    单机单卡: "Single GPU",
+    单机双卡分片: "Dual-GPU sharding",
+    统一内存: "Unified memory",
+    "跨设备分片，需验证运行时": "Cross-device sharding (validate runtime)",
+  };
+  return esc(T(p[5], modes[p[5]] || p[5]));
 }
 function tune(m) {
   const tier = +state.values.accelerator;
@@ -353,6 +373,15 @@ function deviceDetail(h) {
       h[3][1] + " TOPS · " + h[3][2],
     ],
   ];
+  const plan = catalog.P.find((p) => p[3] === 1 && p[0] === "1 × " + h[0]);
+  if (plan) {
+    items.push([T("部署方式", "Deployment topology"), planMode(plan)]);
+    if (plan[9]?.includes("支持 AI Fusion 2.0"))
+      items.push([
+        T("支持的部署方式", "Supported deployment"),
+        "AI Fusion 2.0",
+      ]);
+  }
   if (h[2] !== null)
     items.push([
       T("方向性速度估算", "Directional speed estimate"),
@@ -392,6 +421,7 @@ function toolbar(kind) {
         : kind === "performance"
           ? [
               ["all", "全部证据", "All evidence"],
+              ["measured", "指定模型有实测", "Named-model measurements"],
               ["estimate", "有方向性估算", "Directional estimate available"],
             ]
           : [
@@ -440,13 +470,10 @@ function compared() {
     ]);
   if (+state.values.accelerator)
     dimensions.push([T("微调规则", "Fine-tuning rule"), tune]);
-  if (selected.some((m) => speed(catalog.H[+state.values.device], m)))
+  if (selected.some((m) => fleetMeasurements(m).length))
     dimensions.push([
-      T("原站测速记载", "Source speed claim"),
-      (m) =>
-        speed(catalog.H[+state.values.device], m)
-          ? speed(catalog.H[+state.values.device], m) + " Token/s"
-          : "—",
+      T("所选设备的原站测速", "Source measurements on selected hardware"),
+      (m) => fleetMeasurements(m).join("<br>"),
     ]);
   return `<section class="af-compare"><h3>${T("参数对比", "Parameter comparison")}</h3>${dataTable([T("维度", "Dimension"), ...selected.map((m) => esc(m[0]))], dimensions.map(([n, f]) => '<tr><th scope="row">' + n + "</th>" + selected.map((m) => "<td>" + f(m) + "</td>").join("") + "</tr>").join(""))}</section>`;
 }
@@ -609,7 +636,7 @@ function individualResults() {
       const m = catalog.M[+r.id],
         c = requestMemory(r);
       const plans = requestValid(r, c) ? modelPlans(c.need) : [];
-      return `<details class="af-plan"><summary><strong>${esc(m[0])}</strong><span>${requestValid(r, c) ? c.need + " GB · " + plans.length + T(" 个独立方案", " standalone plans") : T("请调整参数", "Adjust inputs")}</span></summary><div class="af-plan-body">${modelDetail(m, "model", c)}${dataTable([T("独立设备方案", "Standalone hardware"), T("显存 / 剩余", "VRAM / unused"), T("部署条件", "Conditions")], plans.map((p) => `<tr><td>${esc(devName(p[0]))}</td><td>${p[1]} / ${p[1] - c.need} GB</td><td>${p[3] > 1 ? T("跨机分片：需验证运行时", "Cross-machine sharding: validate runtime") : T("单机容量估算", "Single-machine capacity estimate")}</td></tr>`).join(""))}</div></details>`;
+      return `<details class="af-plan"><summary><strong>${esc(m[0])}</strong><span>${requestValid(r, c) ? c.need + " GB · " + plans.length + T(" 个独立方案", " standalone plans") : T("请调整参数", "Adjust inputs")}</span></summary><div class="af-plan-body">${modelDetail(m, "model", c)}${dataTable([T("独立设备方案", "Standalone hardware"), T("显存 / 剩余", "VRAM / unused"), T("部署条件", "Conditions")], plans.map((p) => `<tr><td>${esc(devName(p[0]))}</td><td>${p[1]} / ${p[1] - c.need} GB</td><td>${planMode(p) + (p[9]?.includes("支持 AI Fusion 2.0") ? " · AI Fusion 2.0" : "")}</td></tr>`).join(""))}</div></details>`;
     })
     .join("")}`;
 }
@@ -690,7 +717,7 @@ function libraryDevices(performance = false) {
     Math.min(state.catalogPage, Math.max(1, Math.ceil(totalRows / 8))),
   );
   rows = rows.slice((state.catalogPage - 1) * 8, state.catalogPage * 8);
-  return `<h2>${performance ? T("性能资料库", "Performance library") : T("设备库", "Device library")} <span class="af-mark">${catalog.H.length}</span></h2><p class="af-subtitle">${performance ? T("原目录中的方向性速度估算；不代表模型实测吞吐。", "Directional speed estimates from the original catalog; not measured model throughput.") : T(catalog.H.length + " 条设备配置，来自原始设备目录。", catalog.H.length + " device configurations from the original catalog.")}</p>${toolbar(performance ? "performance" : "devices")}<p class="af-meta">${T("显示", "Showing")} ${totalRows}/${catalog.H.length}</p>${dataTable(
+  return `<h2>${performance ? T("性能资料库", "Performance library") : T("设备库", "Device library")} <span class="af-mark">${catalog.H.length}</span></h2><p class="af-subtitle">${performance ? T("指定模型的上游实测记录与设备方向性估算分别展示。", "Named-model measurements and directional device estimates from the source catalog.") : T(catalog.H.length + " 条设备配置，来自原始设备目录。", catalog.H.length + " device configurations from the original catalog.")}</p>${toolbar(performance ? "performance" : "devices")}<p class="af-meta">${T("显示", "Showing")} ${totalRows}/${catalog.H.length}</p>${dataTable(
     performance
       ? [
           T("设备配置", "Device configuration"),
@@ -727,6 +754,163 @@ function libraryDevices(performance = false) {
     performance ? [44, 45, 11] : [38, 13, 15, 23, 11],
   )}${catalogPager(totalRows)}`;
 }
+// Source files are browsed separately from the calculator's model and hardware IDs.
+const packLabels = {
+  models: ["模型", "Models"],
+  modelBenchmarks: ["模型评测", "Model benchmarks"],
+  gpus: ["GPU 规格", "GPU specifications"],
+  inferenceProfiles: ["推理配置", "Inference profiles"],
+  cloudPricing: ["云服务价格", "Cloud pricing"],
+  assumptions: ["计算假设", "Assumptions"],
+  presets: ["预设", "Presets"],
+  systems: ["整机系统", "Systems"],
+  exchangeRates: ["汇率", "Exchange rates"],
+};
+const packCache = new Map();
+let packId = "models",
+  recordIndex = 0;
+function loadPack(id) {
+  if (!Object.hasOwn(packManifest.catalogs, id)) return;
+  packId = id;
+  recordIndex = 0;
+  if (packCache.has(id)) return;
+  packCache.set(id, { loading: true });
+  fetch("../data/" + packManifest.catalogs[id])
+    .then((response) => {
+      if (!response.ok) throw new Error("Catalog request failed");
+      return response.json();
+    })
+    .then((data) => {
+      if (!Array.isArray(data.data ?? data.currencies))
+        throw new Error("Invalid catalog");
+      packCache.set(id, { data });
+    })
+    .catch(() => packCache.set(id, { error: true }))
+    .finally(() => {
+      if (state.page === "metadata" && packId === id) render();
+    });
+}
+function metadataFields(object) {
+  return dl(
+    Object.entries(object)
+      .filter(
+        ([, value]) =>
+          value != null &&
+          value !== "" &&
+          !/^(tbd|pending|unknown)$/i.test(String(value)),
+      )
+      .map(([key, value]) => [
+        esc(key),
+        typeof value === "object"
+          ? '<pre class="af-raw-value">' +
+            esc(JSON.stringify(value, null, 2)) +
+            "</pre>"
+          : esc(value),
+      ]),
+  );
+}
+function metadataPage() {
+  const entry = packCache.get(packId);
+  const head =
+    "<h2>" +
+    T("源数据与元数据", "Source data & metadata") +
+    '</h2><p class="af-subtitle">' +
+    T(
+      "查看上游 Data Pack 的原始记录、来源和字段。选型目录另外包含 ",
+      "Browse upstream Data Pack records, sources and fields. The calculator catalog separately contains ",
+    ) +
+    catalog.M.length +
+    T(" 条模型、", " models, ") +
+    catalog.H.length +
+    T(" 条设备和 ", " devices and ") +
+    catalog.P.length +
+    T(" 条部署方案。", " deployment plans.") +
+    '</p><p class="af-meta">' +
+    link(
+      "../live-deployment-calculator.html",
+      T("原始计算器", "Source calculator"),
+    ) +
+    " · " +
+    link("../data/manifest.json", T("数据包清单", "Pack manifest")) +
+    " · " +
+    esc(packManifest.dataVersion) +
+    "</p>";
+  const selector =
+    '<label class="af-field"><span>' +
+    T("原始数据表", "Source catalog") +
+    '</span><select id="af-pack-select" data-pack-select="1">' +
+    Object.keys(packManifest.catalogs)
+      .map(
+        (id) =>
+          '<option value="' +
+          esc(id) +
+          '" ' +
+          (id === packId ? "selected" : "") +
+          ">" +
+          T(...(packLabels[id] || [id, id])) +
+          "</option>",
+      )
+      .join("") +
+    "</select></label>";
+  const file = link(
+    "../data/" + packManifest.catalogs[packId],
+    T("打开完整原始 JSON", "Open complete original JSON"),
+  );
+  if (!entry?.data)
+    return (
+      head +
+      selector +
+      '<p role="status">' +
+      (entry?.error
+        ? T("数据表读取失败。", "Catalog could not be loaded.")
+        : T("正在读取数据表…", "Loading catalog…")) +
+      " " +
+      file +
+      "</p>" +
+      (entry?.error
+        ? '<button type="button" data-retry-pack="1">' +
+          T("重新读取", "Retry") +
+          "</button>"
+        : "")
+    );
+  const { data, currencies, ...metadata } = entry.data;
+  const records = data ?? currencies;
+  const selection = records
+    .map(
+      (r, i) =>
+        '<option value="' +
+        i +
+        '" ' +
+        (i === recordIndex ? "selected" : "") +
+        ">" +
+        esc(r.name ?? r.label ?? r.id ?? r.code ?? String(i + 1)) +
+        "</option>",
+    )
+    .join("");
+  return (
+    head +
+    '<section class="af-group"><div class="af-fields">' +
+    selector +
+    '<label class="af-field"><span>' +
+    T("选择记录", "Select record") +
+    " · " +
+    records.length +
+    '</span><select id="af-record-select" data-record-select="1">' +
+    selection +
+    "</select></label></div><p>" +
+    file +
+    "</p><details><summary>" +
+    T("来源、版本与更新日期", "Source, version & update date") +
+    "</summary>" +
+    metadataFields(metadata) +
+    '</details></section><section class="af-group af-detail"><h3>' +
+    T("原始记录字段", "Original record fields") +
+    "</h3>" +
+    metadataFields(records[recordIndex] || {}) +
+    "</section>"
+  );
+}
+
 function save() {
   const url = new URL(location.href);
   url.searchParams.set("lang", state.lang);
@@ -768,7 +952,9 @@ function render() {
           ? libraryModels()
           : state.page === "devices"
             ? libraryDevices()
-            : libraryDevices(true);
+            : state.page === "metadata"
+              ? metadataPage()
+              : libraryDevices(true);
   root.querySelector("#af-footer-left").textContent = T(
     catalog.M.length + " 条模型记录 · " + catalog.H.length + " 条设备配置",
     catalog.M.length +
@@ -827,6 +1013,16 @@ root.addEventListener("change", (event) => {
     save();
     return;
   }
+  if (d.packSelect) {
+    loadPack(target.value);
+    render();
+    return;
+  }
+  if (d.recordSelect) {
+    recordIndex = Number(target.value);
+    render();
+    return;
+  }
   const f = event.target.dataset.field;
   if (f) {
     if (event.target.type === "number" && !event.target.checkValidity()) {
@@ -867,7 +1063,10 @@ root.addEventListener("change", (event) => {
 root.addEventListener("click", (event) => {
   const b = event.target.closest("button");
   if (!b) return;
-  if (b.dataset.add) {
+  if (b.dataset.retryPack) {
+    packCache.delete(packId);
+    loadPack(packId);
+  } else if (b.dataset.add) {
     const kind = b.dataset.add;
     const id = root.querySelector("#af-add-" + kind).value;
     const list = kind === "model" ? state.requests : state.fleet;
@@ -915,6 +1114,7 @@ root.addEventListener("click", (event) => {
     state.lang = b.dataset.lang;
   } else if (b.dataset.page) {
     state.page = b.dataset.page;
+    if (state.page === "metadata") loadPack(packId);
     state.catalogPage = 1;
     state.workTab = "results";
     state.search = "";
@@ -950,7 +1150,6 @@ function catalogPager(total) {
   return `<div class="af-pagebar"><span>${total ? `${(state.catalogPage - 1) * 8 + 1}–${Math.min(state.catalogPage * 8, total)}` : "0"} / ${total} · ${T("每页 8 条", "8 per page")}</span><div><button type="button" data-catalog-turn="-1" class="cursor-interaction" ${state.catalogPage === 1 ? "disabled" : ""}>${T("上一页", "Previous")}</button><span>${state.catalogPage} / ${pages}</span><button type="button" data-catalog-turn="1" class="cursor-interaction" ${state.catalogPage === pages ? "disabled" : ""}>${T("下一页", "Next")}</button></div></div>`;
 }
 function resultSet() {
-  const h = catalog.H[+state.values.device];
   let items = catalog.M.map((m, i) => ({ m, i, c: memory(m) })).filter(
     (x) => capability(x.m) && Number.isFinite(x.m[2]),
   );
@@ -974,7 +1173,8 @@ function resultSet() {
     state.resultSort === "large"
       ? b.m[1] - a.m[1] || a.m[0].localeCompare(b.m[0])
       : state.resultSort === "evidence"
-        ? Number(Boolean(speed(h, b.m))) - Number(Boolean(speed(h, a.m))) ||
+        ? Number(Boolean(fleetMeasurements(b.m).length)) -
+            Number(Boolean(fleetMeasurements(a.m).length)) ||
           (a.c.need ?? Infinity) - (b.c.need ?? Infinity) ||
           a.m[0].localeCompare(b.m[0])
         : (a.c.need ?? Infinity) - (b.c.need ?? Infinity) ||
@@ -997,8 +1197,7 @@ function resultPager(total, pageCount) {
   return `<div class="af-pagebar"><span role="status">${total ? `${(state.resultPage - 1) * 5 + 1}–${Math.min(state.resultPage * 5, total)}` : "0"} / ${total} ${T("条 · 每页 5 条", "records · 5 per page")}</span><div><button type="button" data-turn="-1" class="cursor-interaction" ${state.resultPage === 1 ? "disabled" : ""}>${T("上一页", "Previous")}</button><span>${state.resultPage} / ${pageCount}</span><button type="button" data-turn="1" class="cursor-interaction" ${state.resultPage === pageCount ? "disabled" : ""}>${T("下一页", "Next")}</button></div></div>`;
 }
 function resultsView() {
-  const { items, counts, pageCount, current } = resultSet(),
-    h = catalog.H[+state.values.device];
+  const { items, counts, pageCount, current } = resultSet();
   const cap = fleetCapacity();
   const sorting =
     state.resultSort === "memory"
@@ -1021,10 +1220,10 @@ function resultsView() {
   ];
   const rows = current
     .map(({ m, i, c, kind }) => {
-      const s = speed(h, m),
+      const s = fleetMeasurements(m).join("<br>"),
         st = status(m, c),
         actualQ = m.slice(4).find((q) => q[1] === +state.values.quant);
-      return `<tr><td><label><input type="checkbox" class="af-check cursor-interaction" data-pick="${i}" ${state.selected.includes(i) ? "checked" : ""} ><strong>${esc(m[0])}</strong></label><small>${m[1]}B · ${actualQ ? actualQ[0] : T("量化不匹配", "Quantization mismatch")} · ${ctx(m[3])} ${T("上限", "max")}</small></td><td><strong>${c.need === null ? "—" : c.need + " GB"}</strong><small>${c.need === null ? T("缺少 KV 数据", "Missing KV data") : c.need <= cap ? T("最大单机余量 ", "Largest machine headroom ") + (cap - c.need) + " GB" : T("缺口 ", "Short by ") + (c.need - cap) + " GB"}</small></td><td><span class="${kind === "fit" ? "af-ok" : "af-warn"}">${st[1]}</span>${s ? "<small>" + T("测速记载 ", "Source claim ") + s + " Token/s</small>" : ""}</td><td>${tune(m)}<small>${T("按原站微调规则", "Original fine-tuning rule")}</small></td><td><button type="button" class="af-rowbtn cursor-interaction" data-result-detail="${i}">${T("完整详情", "Full details")}</button></td></tr>`;
+      return `<tr><td><label><input type="checkbox" class="af-check cursor-interaction" data-pick="${i}" ${state.selected.includes(i) ? "checked" : ""} ><strong>${esc(m[0])}</strong></label><small>${m[1]}B · ${actualQ ? actualQ[0] : T("量化不匹配", "Quantization mismatch")} · ${ctx(m[3])} ${T("上限", "max")}</small></td><td><strong>${c.need === null ? "—" : c.need + " GB"}</strong><small>${c.need === null ? T("缺少 KV 数据", "Missing KV data") : c.need <= cap ? T("最大单机余量 ", "Largest machine headroom ") + (cap - c.need) + " GB" : T("缺口 ", "Short by ") + (c.need - cap) + " GB"}</small></td><td><span class="${kind === "fit" ? "af-ok" : "af-warn"}">${st[1]}</span>${s ? "<small>" + T("测速记载 ", "Source claim ") + s + "</small>" : ""}</td><td>${tune(m)}<small>${T("按原站微调规则", "Original fine-tuning rule")}</small></td><td><button type="button" class="af-rowbtn cursor-interaction" data-result-detail="${i}">${T("完整详情", "Full details")}</button></td></tr>`;
     })
     .join("");
   return `<div class="af-results-switch" aria-label="${T("结果分组", "Result groups")}">${tabs.map(([id, name, n]) => `<button type="button" data-result-group="${id}" class="cursor-interaction" aria-pressed="${state.resultGroup === id}"><span>${name}</span><b>${n}</b></button>`).join("")}</div><div class="af-result-tools"><label><span>${T("用途", "Use case")}</span><select id="af-quick-cap" data-field="cap" class="cursor-interaction">${options
