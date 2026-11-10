@@ -45,6 +45,12 @@ V2 采用确认后的浅色、结果优先界面。原始数据和显存计算�
 
 原仓库中另一套 React 数据管理、导入导出和汇率模块仍保留在源码里，但没有把未接入 V2 入口的功能伪装成可用按钮。
 
+## 单文件离线版
+
+[打开 standalone 网页](https://joyzhou123123.github.io/ai-compute-advisor_V2/standalone.html)，也可以下载 `public/standalone.html`，双击直接使用，无需启动服务。文件内含最新界面、计算逻辑、九张元数据表、清单、新增设备规则和原始计算器。中英文切换、模型与硬件选型、元数据查看均可离线使用；外部资料链接需要联网。
+
+更新界面或数据后运行 `npm run generate:standalone`。正式构建也会自动重新生成，`npm run verify:standalone` 可检查文件是否已同步。
+
 ## 本地运行
 
 需要 Node.js 22.13.0 或更高版本。

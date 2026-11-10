@@ -45,6 +45,12 @@ The source calculator contains **22 model records, 26 device configurations and 
 
 Run `npm run verify:data` to compare 33 original files against their SHA-256 baseline, and `npm run verify:source` to verify the UI's generated source bridge. See [V2 implementation and data notes](docs/ui-v2.md).
 
+## Standalone offline HTML
+
+[Open the standalone page](https://joyzhou123123.github.io/ai-compute-advisor_V2/standalone.html), or download `public/standalone.html` and double-click it. This one file embeds the current UI, calculation code, all nine metadata catalogs, their manifest, device additions and the original calculator. Model and hardware selection, bilingual UI and metadata browsing work offline. External source links require an internet connection.
+
+Run `npm run generate:standalone` after editing the UI or data. Production builds also regenerate the file. `npm run verify:standalone` detects a stale copy.
+
 ## Run locally
 
 Requires Node.js 22.13.0 or newer.
