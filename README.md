@@ -11,9 +11,9 @@ A static model and hardware capacity planner with a results-first, fixed light i
 - Results first: capacity candidates and incompatible configurations are grouped separately.
 - Five results per page; eight records per catalog page, with search and sorting.
 - Separate requirement editing, full details, and side-by-side comparison of 2–3 models.
-- Multi-model simultaneous deployment with independent quantization, context and concurrency.
-- Multi-type hardware inventory with a separate machine count per type.
-- Ranked hardware combinations with explicit model placement and remaining VRAM per machine. Cross-machine VRAM is not pooled.
+- Individual model comparison with independent quantization, context and concurrency.
+- Single-machine hardware selection and ranked single-machine results, five per page.
+- Multi-machine deployment is paused pending validation. Single-machine dual-GPU configurations remain selectable.
 - Unimplemented controls and empty/TBD detail fields are hidden.
 - Global Chinese / English switch; language is retained in the URL.
 - Fixed light theme, independent of the operating system's appearance.
@@ -23,10 +23,16 @@ A static model and hardware capacity planner with a results-first, fixed light i
 1. Open the [V2 calculator](https://joyzhou123123.github.io/ai-compute-advisor_V2/?lang=en).
 2. Start with **Hardware → models**, or switch to **Model → hardware**.
 3. Use **Edit requirements** to change hardware, quantization, context, concurrency and the relevant deployment inputs.
-4. In **Model → hardware**, add models and find simultaneous deployment combinations, or switch to individual comparison.
-5. In **Hardware → models**, add hardware types and counts, then select models across pages and choose **Assess simultaneous deployment**. Parameter comparison remains available for 2–3 models.
+4. In **Model → hardware**, add models and inspect each model’s single-machine options, ordered by unused VRAM.
+5. In **Hardware → models**, select one machine and compare full parameters for 2–3 models across result pages.
 
 Capacity estimates are not guarantees of throughput or runtime compatibility. TOPS remains hardware metadata, not LLM tokens per second. The performance library distinguishes upstream measurements for named models from directional estimates.
+
+## Update on 2026-11-10
+
+The device library now contains 28 configurations, including ThinkCentre neo50t Gen7 and YangTian T490INS with RTX 5060 Ti 16GB. Owner-confirmed model matching and AI Fusion 2.0 rules reuse the ThinkCentre X Tower single-card configuration. Additions, confirmation dates and provenance are stored separately in `public/ui-v2/device-additions.json`. Measurements are not inferred for the new devices.
+
+Fine-tuning labels now say “AI Fusion 1.0 unsupported”. Multi-machine controls, placement results and cross-machine recommendations are withdrawn pending validation. The source records remain preserved.
 
 ## Original data preserved
 

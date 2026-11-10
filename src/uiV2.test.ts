@@ -1,4 +1,6 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 import { createContext, runInContext } from "node:vm";
 import { describe, expect, it } from "vitest";
@@ -133,7 +135,7 @@ describe("UI v2 preserves the original data and calculator", () => {
         "[catalog.M.length,catalog.H.length,catalog.P.length]",
         context,
       ),
-    ).toEqual([22, 26, 27]);
+    ).toEqual([22, 28, 29]);
     expect(
       runInContext(
         "Number.isNaN(catalog.M.find(m=>m[0]==='MiniMax H3 33B')[2])",
@@ -176,7 +178,7 @@ describe("results-first interactions", () => {
   it("keeps active inputs and switches language without resetting choices", () => {
     const h = harness();
     h.click({ work: "config" });
-    expect(h.content()).toContain("data-fleet-count");
+    expect(h.content()).toContain('data-field="device"');
     h.click({ configGroup: "1" });
     expect((h.content().match(/data-field=/g) || []).length).toBe(4);
     h.change("context", "64");
@@ -219,7 +221,7 @@ describe("results-first interactions", () => {
     expect(h.content()).toContain("17–22 / 22");
     h.click({ page: "devices" });
     h.click({ catalogTurn: "1" });
-    expect(h.content()).toContain("9–16 / 26");
+    expect(h.content()).toContain("9–16 / 28");
   });
 
   it("separates incompatible contexts and prevents missing data from becoming zero", () => {
@@ -235,16 +237,35 @@ describe("results-first interactions", () => {
   });
 });
 
-describe("V2.1 simultaneous deployment", () => {
-  it("keeps the browser planner in sync with the pure calculator", () => {
-    expect(() =>
-      execFileSync(process.execPath, [
-        "scripts/build-combination-planner.mjs",
-        "--check",
-      ]),
-    ).not.toThrow();
+describe("single-machine selection and owner-confirmed additions", () => {
+  it("rejects malformed additions, duplicate identities and broken source references before generation", () => {
+    const directory = mkdtempSync(join(tmpdir(), "advisor-additions-"));
+    const path = join(directory, "devices.json");
+    const original = JSON.parse(readFileSync(new URL("../public/ui-v2/device-additions.json", import.meta.url), "utf8"));
+    const validate = (data: typeof original) => {
+      writeFileSync(path, JSON.stringify(data));
+      return execFileSync(process.execPath, ["scripts/extract-live-source.mjs", "--validate-additions", path], { stdio: "pipe" });
+    };
+    try {
+      expect(() => validate(original)).not.toThrow();
+      for (const mutation of [
+        (d: typeof original) => { d.devices[1].id = d.devices[0].id; },
+        (d: typeof original) => { d.devices[1].name = d.devices[0].name; },
+        (d: typeof original) => { d.devices[0].referenceDevice = "Missing reference"; },
+        (d: typeof original) => { d.devices[0].aiFusion2 = "yes"; },
+        (d: typeof original) => { d.devices[0].lastUpdated = "not-a-date"; },
+        (d: typeof original) => { d.devices[0].measuredSpeed = 70; },
+      ]) {
+        const changed = structuredClone(original);
+        mutation(changed);
+        expect(() => validate(changed)).toThrow();
+      }
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
   });
-  it("adds models, keeps independent parameters across language changes, and displays placements", () => {
+
+  it("keeps independent model inputs and lists only single-machine plans", () => {
     const h = harness();
     h.click({ page: "model" });
     h.click({ modelTab: "config" });
@@ -252,67 +273,92 @@ describe("V2.1 simultaneous deployment", () => {
     h.click({ add: "model" });
     h.changeData({ request: "0", scope: "model", param: "concurrency" }, "3");
     h.click({ lang: "en" });
-    expect(h.content()).toContain('id="af-model-0-concurrency"');
-    expect(
-      runInContext("state.requests.map(r=>[r.id,r.concurrency])", h.context),
-    ).toEqual([
-      ["15", 4],
-      ["0", 3],
-    ]);
+    expect(runInContext("state.requests.map(r=>[r.id,r.concurrency])", h.context)).toEqual([["15", 4], ["0", 3]]);
     h.click({ modelTab: "results" });
-    expect(h.content()).toContain("Model placement");
-    expect(h.content()).toContain("Qwen3 8B");
-    h.click({ comboMode: "compare" });
     expect(h.content()).toContain("standalone plans");
+    expect(h.content()).toContain("Qwen3 8B");
+    expect(h.content()).not.toMatch(/data-combo-mode|Model placement|2 × ThinkCentre|Hardware combinations/);
+    h.click({ modelPlan: "0", pageNumber: "2" });
+    expect(h.content()).toContain("6–10 /");
+    expect(h.content()).toContain('data-model-plan-details="0" open');
     h.click({ modelTab: "config" });
     h.click({ removeModel: "0", scope: "model" });
     expect(runInContext("state.requests.length", h.context)).toBe(1);
   });
-  it("selects models across pages and allocates them within mixed inventory", () => {
+
+  it("has no multi-machine controls and changing hardware replaces its capacity", () => {
     const h = harness();
-    h.click({ work: "config" });
-    h.node("#af-add-device").value = "0";
-    h.click({ add: "device" });
-    h.changeData({ fleetCount: "0" }, "3");
-    h.click({ work: "results" });
-    for (const id of ["0", "1", "2", "5"]) h.changeData({ pick: id }, "", true);
-    expect(runInContext("state.selected.length", h.context)).toBe(4);
-    h.click({ work: "allocation" });
-    expect(h.content()).toContain("模型分配");
-    const plans = runInContext("state.planningResult.plans", h.context) as {
-      machines: {
-        deviceId: string;
-        models: string[];
-        used: number;
-        capacity: number;
-      }[];
-    }[];
-    expect(plans.length).toBeGreaterThan(0);
-    for (const p of plans) {
-      expect(p.machines.flatMap((m) => m.models).sort()).toEqual([
-        "0",
-        "1",
-        "2",
-        "5",
-      ]);
-      expect(
-        p.machines.filter((m) => m.deviceId === "1").length,
-      ).toBeLessThanOrEqual(2);
-      expect(
-        p.machines.filter((m) => m.deviceId === "0").length,
-      ).toBeLessThanOrEqual(3);
-      for (const m of p.machines)
-        expect(m.used).toBeLessThanOrEqual(m.capacity);
+    for (const lang of ["zh", "en"]) {
+      h.click({ lang });
+      h.click({ work: "config" });
+      expect(h.content()).not.toMatch(/data-fleet-count|data-add="device"|data-field="shard"/);
+      h.change("device", "26");
+      expect(runInContext("fleetCapacity()", h.context)).toBe(16);
+      h.click({ work: "results" });
+      expect(h.content()).toContain("ThinkCentre neo50t Gen7");
+      expect(h.content()).not.toContain('data-work="allocation"');
+      h.changeData({ pick: "0" }, "", true);
+      h.changeData({ pick: "1" }, "", true);
+      h.click({ work: "compare" });
+      expect(h.content()).toContain("Qwen3 8B");
+      expect(h.content()).toContain("Llama 3.2");
+      h.click({ work: "allocation" });
+      expect(h.content()).not.toMatch(/模型分配|Model placement/);
     }
-    h.click({ removeModel: "0", scope: "hardware" });
-    expect(runInContext("state.selected.includes(0)", h.context)).toBe(false);
   });
-  it("blocks combinations with unsupported per-model inputs", () => {
+
+  it("reuses the reference capacity and AI Fusion 2.0 rules without claiming measurements", () => {
+    const h = harness();
+    const result = runInContext(`(() => {
+      const reference = catalog.H[0];
+      return catalog.H.slice(26).map(device => ({
+        capacity: device[1], specs: device[3], measurement: speed(device, catalog.M[7]),
+        detail: deviceDetail(device),
+        samePlans: catalog.M.filter(m=>Number.isFinite(m[2])).every(m => [4,8,16].every(bits => [16,32,128].every(ctx => {
+          const need = inspectMemory(m,bits,ctx,1).need;
+          const plans = modelPlans(need);
+          return plans.some(p=>p[0]==="1 × "+reference[0]) === plans.some(p=>p[0]==="1 × "+device[0]);
+        }))),
+      }));
+    })()`, h.context) as {capacity:number; specs: unknown[]; measurement:unknown; detail:string; samePlans:boolean}[];
+    expect(result).toHaveLength(2);
+    for (const device of result) {
+      expect(device.capacity).toBe(16);
+      expect(device.specs).toEqual([448,759,"FP4 Tensor Core vendor peak",180]);
+      expect(device.measurement).toBeNull();
+      expect(device.samePlans).toBe(true);
+      expect(device.detail).toContain("AI Fusion 2.0");
+      expect(device.detail).toContain("2026-11-10");
+      expect(device.detail).toContain("ThinkCentre X Tower");
+    }
+    h.click({ page: "devices" });
+    h.node("#af-search").value = "neo50t";
+    h.click({}, "af-apply");
+    expect(h.content()).toContain("ThinkCentre neo50t Gen7");
+    h.node("#af-search").value = "T490INS";
+    h.click({}, "af-apply");
+    expect(h.content()).toContain("YangTian T490INS");
+    h.click({ page: "performance" });
+    expect(h.content()).not.toContain("<strong>YangTian T490INS");
+  });
+
+  it("uses the requested AI Fusion 1.0 fine-tuning label in both languages", () => {
+    const h = harness();
+    for (const [lang, label] of [["zh", "AI Fusion 1.0不支持"], ["en", "AI Fusion 1.0 unsupported"]]) {
+      h.click({ lang });
+      expect(runInContext("catalog.M.filter(isAiFusion2).map(tune)", h.context)).toEqual(Array(3).fill(label));
+      const detail = runInContext("modelDetail(catalog.M.find(isAiFusion2))", h.context);
+      expect(detail).toContain(label);
+      expect(detail).not.toMatch(/(?<!AI )Fusion/);
+    }
+  });
+
+  it("does not recommend hardware for invalid model inputs", () => {
     const h = harness();
     h.click({ page: "model" });
     h.changeData({ request: "15", scope: "model", param: "context" }, "999999");
-    expect(h.content()).toContain("暂不生成组合");
-    expect(h.content()).not.toContain("af-plan-body");
+    expect(h.content()).toContain("请调整参数");
+    expect(h.content()).not.toContain("1 × ThinkCentre");
   });
 });
 
@@ -336,7 +382,7 @@ describe("upstream metadata restoration", () => {
     h.node("#af-filter").value = "measured";
     h.node("#af-family").value = "all";
     h.click({}, "af-apply");
-    expect(h.content()).toContain("11/26");
+    expect(h.content()).toContain("11/28");
   });
   it("allows each original Data Pack catalog to be browsed via the UI", async () => {
     const h = harness();

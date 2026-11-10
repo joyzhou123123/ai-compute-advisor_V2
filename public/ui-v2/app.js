@@ -3,21 +3,19 @@ import {
   measuredChatSpeed,
   packManifest,
   inspectMemory,
-  capacityFor,
+  deviceAdditions,
   modelPlans,
   matchesCapability,
   isAiFusion2,
   canPostTrain,
 } from "./source.js";
-import { planCombinations } from "./combination-planner.js";
 const root = document.getElementById("advisor-full"),
   body = root.querySelector("#af-content");
 const state = {
   requests: [{ id: "15", bits: 8, context: 128, concurrency: 4 }],
   hardwareRequests: [],
-  fleet: [{ id: "1", count: 2 }],
-  comboMode: "deploy",
-  editAllocation: false,
+  modelPlanPages: {},
+  openModelPlans: new Set(["15"]),
   catalogPage: 1,
   modelTab: "results",
   planPage: 1,
@@ -39,13 +37,11 @@ const state = {
   compare: false,
   values: {
     device: "1",
-    count: "2",
     cap: "all",
     quant: "4",
     context: "32",
     concurrency: "1",
     accelerator: "1024",
-    shard: "yes",
     model: "15",
     mquant: "8",
     mcontext: "128",
@@ -126,10 +122,6 @@ const options = {
     ["320", "320GB", "320GB"],
     ["1024", "1TB", "1TB"],
   ],
-  shard: () => [
-    ["no", "否：仅做副本并发", "No: replicas only"],
-    ["yes", "是：需验证运行时", "Yes: validate runtime"],
-  ],
 };
 const fields = {
   device: [
@@ -138,20 +130,6 @@ const fields = {
     "select",
     "设备库 " + catalog.H.length + " 条配置",
     catalog.H.length + " device configurations",
-  ],
-  count: [
-    "设备台数",
-    "Machine count",
-    "number",
-    "用于区分副本与跨机分片",
-    "Replicas vs. cross-device sharding",
-  ],
-  shard: [
-    "允许跨设备分片",
-    "Allow cross-device sharding",
-    "select",
-    "容量合计有前提，需验证运行时",
-    "Pooled capacity requires runtime validation",
   ],
   accelerator: [
     "AI 加速卡（微调）",
@@ -221,8 +199,8 @@ const fields = {
     "显存使用上限（%）",
     "VRAM utilization limit (%)",
     "number",
-    "50–99%；标准默认 90%，Fusion 规则 95%",
-    "50–99%; standard 90%, Fusion rule 95%",
+    "50–99%；标准默认 90%，AI Fusion 2.0 规则 95%",
+    "50–99%; standard 90%, AI Fusion 2.0 rule 95%",
   ],
 };
 function field(id) {
@@ -268,14 +246,14 @@ function memory(m, mode = "hardware") {
   );
 }
 function speed(h, m) {
+  if (deviceAdditions.devices.some(d => d.name === h[0])) return null;
   const record = measuredChatSpeed(h[0], m?.[0]);
   if (!record) return null;
   return (record.low === record.high ? T("约 ", "≈") : "") + record.text;
 }
 function fleetMeasurements(m) {
-  return state.fleet.flatMap((f) => {
-    const h = catalog.H[+f.id],
-      value = speed(h, m);
+  return [catalog.H[+state.values.device]].flatMap((h) => {
+    const value = speed(h, m);
     return value ? [esc(devName(h[0])) + " · " + value + " Token/s"] : [];
   });
 }
@@ -291,7 +269,7 @@ function planMode(p) {
 function tune(m) {
   const tier = +state.values.accelerator;
   if (!tier) return T("未选加速卡", "No accelerator");
-  if (fusion(m)) return T("Fusion 不支持", "Fusion unsupported");
+  if (fusion(m)) return T("AI Fusion 1.0不支持", "AI Fusion 1.0 unsupported");
   return canPostTrain(m, tier)
     ? T("规则支持", "Rule supports")
     : T("规则不支持", "Rule excludes");
@@ -334,7 +312,7 @@ function modelDetail(m, mode = "hardware", calculated) {
   if (Number.isFinite(m[2]))
     items.push(
       [T("KV / Token", "KV / token"), m[2].toLocaleString() + " B/token"],
-      [T("KV 精度", "KV precision"), fusion(m) ? "Fusion 2.0 KV" : "Q8 KV"],
+      [T("KV 精度", "KV precision"), fusion(m) ? "AI Fusion 2.0 KV" : "Q8 KV"],
     );
   if (c.need !== null && c.supported && c.contextOK)
     items.push(
@@ -399,6 +377,12 @@ function deviceDetail(h) {
       T("官方 GPU 资料", "Official GPU source"),
       link(h[4], T("查看来源", "View source")),
     ]);
+  const addition = deviceAdditions.devices.find(d => d.name === h[0]);
+  if (addition) items.push(
+    [T("搭配规则来源", "Matching rule source"), esc(devName(addition.referenceDevice))],
+    [T("确认日期", "Confirmed on"), addition.lastUpdated],
+    [T("规则说明", "Rule scope"), T("按产品负责人确认沿用模型搭配及 AI Fusion 2.0 规则。", "Model matching and AI Fusion 2.0 rules confirmed by the product owner.")],
+  );
   return dl(items);
 }
 function familyFilter() {
@@ -509,11 +493,11 @@ function newRequest(id, hardware = false) {
   };
 }
 function fleetCapacity() {
-  return Math.max(...state.fleet.map((f) => catalog.H[+f.id][1]));
+  return catalog.H[+state.values.device][1];
 }
 function picker(kind) {
   const model = kind === "model";
-  const selected = model ? state.requests : state.fleet;
+  const selected = state.requests;
   const opts = (model ? options.model() : options.device()).filter(
     (o) => !selected.some((s) => s.id === o[0]),
   );
@@ -543,117 +527,29 @@ function requestEditor(requests, scope) {
     .join("")}</div>`;
 }
 function fleetEditor() {
-  return `<section class="af-group"><h3>${T("已有硬件组合", "Available hardware fleet")}</h3><p class="af-meta">${T("每种设备分别填台数。模型按单机放置，多台设备可分别承载不同模型。", "Set the count for each type. Models are placed on individual machines; different machines can host different models.")}</p>${picker("device")}<div class="af-request-list">${state.fleet.map((f) => `<article class="af-request"><div class="af-fleet-row"><strong>${esc(devName(catalog.H[+f.id][0]))}<small>${catalog.H[+f.id][1]} GB / ${T("台", "machine")}</small></strong><label for="af-count-${f.id}">${T("台数", "Machines")}<input id="af-count-${f.id}" data-fleet-count="${f.id}" type="number" required min="1" max="999" step="1" value="${f.count}"></label><button type="button" class="af-rowbtn" data-remove-device="${f.id}" ${state.fleet.length === 1 ? "disabled" : ""}>${T("移除", "Remove")}</button></div><details class="af-inline-detail"><summary>${T("设备完整参数", "Full device parameters")}</summary>${deviceDetail(catalog.H[+f.id])}</details></article>`).join("")}</div></section>`;
-}
-function placementResults(requests, inventory = false) {
-  if (!requests.length)
-    return `<p class="af-notice">${T("请先在候选列表勾选需要同时部署的模型。", "Select models to deploy together from the candidate list.")}</p>`;
-  const invalid = requests.filter((r) => !requestValid(r));
-  if (invalid.length)
-    return `<p class="af-notice" role="alert">${T("以下模型的运行参数需要调整，暂不生成组合：", "Adjust these models before planning: ")}${invalid.map((r) => esc(catalog.M[+r.id][0])).join("、")}</p>`;
-  const devices = inventory
-    ? state.fleet.map((f) => ({
-        id: f.id,
-        capacity: catalog.H[+f.id][1],
-        count: f.count,
-      }))
-    : catalog.H.map((h, i) => ({ id: String(i), capacity: h[1] }));
-  const demands = requests.map((r) => ({
-    id: r.id,
-    need: requestMemory(r).need,
-  }));
-  const key = JSON.stringify([demands, devices, inventory]);
-  if (state.planningKey !== key) {
-    state.planningResult = planCombinations(demands, devices, inventory);
-    state.planningKey = key;
-    state.planPage = 1;
-  }
-  const result = state.planningResult;
-  const notice =
-    result.status === "limited"
-      ? `<p class="af-notice" role="status">${T("搜索达到计算上限。下列为已找到的容量方案，未保证最少台数或列全组合；没有结果也不代表无解。", "Search limit reached. These are found capacity plans; minimum count and completeness are not guaranteed. No result does not prove infeasibility.")}</p>`
-      : "";
-  const note = `<p class="af-meta">${T("每个模型独立保留原公式的安全余量，再按机器分配；不合并跨机显存。容量匹配仍需验证运行时、机内多卡及 Fusion 内存 / SSD 条件，不保证吞吐或延迟。", "Each model retains its original formula’s headroom before placement. VRAM is not pooled across machines. Validate runtime, intra-machine multi-GPU and Fusion RAM/SSD requirements; capacity does not guarantee throughput or latency.")}</p>`;
-  if (!result.plans.length)
-    return (
-      notice +
-      `<div class="af-empty"><h3>${T(result.status === "limited" ? "尚未找到组合" : "当前无法按单机放置全部模型", result.status === "limited" ? "No combination found yet" : "Cannot place all models on individual machines")}</h3><p>${T("可以调整量化、上下文或并发，或增加更大显存的设备。跨机分片需另行验证，不能仅按总显存判断可部署。", "Adjust quantization, context or concurrency, or add larger-memory hardware. Cross-machine sharding requires separate validation; total VRAM alone does not prove deployability.")}</p></div>` +
-      note
-    );
-  const plans = result.plans,
-    pageCount = Math.max(1, Math.ceil(plans.length / 5));
-  state.planPage = Math.max(1, Math.min(state.planPage, pageCount));
-  const best = plans[0];
-  return (
-    notice +
-    `<div class="af-kpis">${[
-      [T("同时部署模型", "Models together"), requests.length],
-      [T("首选方案台数", "First plan machines"), best.count],
-      [T("需求合计（GB）", "Total need (GB)"), best.used],
-      [T("方案余量（GB）", "Plan headroom (GB)"), best.remaining],
-    ]
-      .map(([k, v]) => `<div><span>${k}</span><strong>${v}</strong></div>`)
-      .join(
-        "",
-      )}</div><div class="af-result-title"><h3>${T("硬件组合方案", "Hardware combinations")} · ${plans.length}${plans.length === 30 ? "+" : ""}</h3><span class="af-meta">${T("台数少优先，其次剩余显存少；不代表价格或性能排名。", "Fewer machines, then less unused VRAM; not a cost or performance ranking.")}</span></div><div class="af-plan-list">${plans
-      .slice((state.planPage - 1) * 5, state.planPage * 5)
-      .map((p, index) => {
-        const n = (state.planPage - 1) * 5 + index + 1;
-        const grouped = [...new Set(p.machines.map((m) => m.deviceId))].map(
-          (id) =>
-            `${esc(devName(catalog.H[+id][0]))} × ${p.machines.filter((m) => m.deviceId === id).length}`,
-        );
-        return `<details class="af-plan" ${index === 0 ? "open" : ""}><summary><span class="af-plan-rank">${n.toString().padStart(2, "0")}</span><span class="af-plan-name"><strong>${grouped.join("<br>")}</strong><small>${T("查看每台设备的模型分配", "Inspect model placement per machine")}</small></span><span class="af-plan-stat"><b>${p.count} ${T("台", "machines")}</b><small>${T("剩余", "Unused")} ${p.remaining} / ${p.capacity} GB</small></span></summary><div class="af-plan-body">${dataTable(
-          [
-            T("设备 / 单机显存", "Machine / VRAM"),
-            T("模型分配", "Model placement"),
-            T("占用 / 剩余", "Used / unused"),
-          ],
-          p.machines
-            .map(
-              (b) =>
-                `<tr><td><strong>${esc(devName(catalog.H[+b.deviceId][0]))}</strong><small>#${b.unit} · ${b.capacity} GB</small></td><td>${b.models
-                  .map((id) => {
-                    const r = requests.find((r) => r.id === id);
-                    return `<div>${esc(catalog.M[+id][0])}<small>${r.bits}-bit · ${r.context}K · ${r.concurrency} ${T("并发", "concurrent")} · ${requestMemory(r).need} GB</small></div>`;
-                  })
-                  .join(
-                    "",
-                  )}</td><td>${b.used} / ${b.capacity - b.used} GB</td></tr>`,
-            )
-            .join(""),
-          [36, 44, 20],
-        )}${inventory ? `<p class="af-meta">${T("未使用设备", "Unused machines")}: ${state.fleet.reduce((n, f) => n + f.count, 0) - p.count}</p>` : ""}</div></details>`;
-      })
-      .join(
-        "",
-      )}</div><div class="af-pagebar"><span>${(state.planPage - 1) * 5 + 1}–${Math.min(state.planPage * 5, plans.length)} / ${plans.length} · ${T("每页 5 组", "5 plans per page")}</span><div><button type="button" data-plan-turn="-1" ${state.planPage === 1 ? "disabled" : ""}>${T("上一页", "Previous")}</button><span>${state.planPage} / ${pageCount}</span><button type="button" data-plan-turn="1" ${state.planPage === pageCount ? "disabled" : ""}>${T("下一页", "Next")}</button></div></div>${note}`
-  );
+  return `<section class="af-group"><h3>${T("单台设备", "Single machine")}</h3>${field("device")}<details class="af-inline-detail"><summary>${T("设备完整参数", "Full device parameters")}</summary>${deviceDetail(catalog.H[+state.values.device])}</details></section>`;
 }
 function individualResults() {
-  return `<p class="af-meta">${T("逐项查看每个模型的容量需求和单独部署选项；此处的方案不代表同时部署。", "Review each model’s requirement and standalone options. These options do not represent simultaneous deployment.")}</p>${state.requests
+  return `<p class="af-meta">${T("逐项查看模型的单机方案，按剩余显存从少到多排序，每页 5 条。", "Review single-machine options for each model, ordered by unused VRAM, five per page.")}</p>${state.requests
     .map((r) => {
       const m = catalog.M[+r.id],
         c = requestMemory(r);
-      const plans = requestValid(r, c) ? modelPlans(c.need) : [];
-      return `<details class="af-plan"><summary><strong>${esc(m[0])}</strong><span>${requestValid(r, c) ? c.need + " GB · " + plans.length + T(" 个独立方案", " standalone plans") : T("请调整参数", "Adjust inputs")}</span></summary><div class="af-plan-body">${modelDetail(m, "model", c)}${dataTable([T("独立设备方案", "Standalone hardware"), T("显存 / 剩余", "VRAM / unused"), T("部署条件", "Conditions")], plans.map((p) => `<tr><td>${esc(devName(p[0]))}</td><td>${p[1]} / ${p[1] - c.need} GB</td><td>${planMode(p) + (p[9]?.includes("支持 AI Fusion 2.0") ? " · AI Fusion 2.0" : "")}</td></tr>`).join(""))}</div></details>`;
+      const plans = requestValid(r, c) ? modelPlans(c.need).filter(p => p[3] === 1).sort((a, b) => a[1] - b[1] || a[0].localeCompare(b[0])) : [];
+      const pageCount = Math.max(1, Math.ceil(plans.length / 5));
+      const page = Math.min(state.modelPlanPages[r.id] || 1, pageCount);
+      const pager = plans.length > 5 ? `<div class="af-pagebar"><span>${(page - 1) * 5 + 1}–${Math.min(page * 5, plans.length)} / ${plans.length}</span><div><button type="button" data-model-plan="${r.id}" data-page-number="${page - 1}" ${page === 1 ? "disabled" : ""}>${T("上一页", "Previous")}</button><span>${page} / ${pageCount}</span><button type="button" data-model-plan="${r.id}" data-page-number="${page + 1}" ${page === pageCount ? "disabled" : ""}>${T("下一页", "Next")}</button></div></div>` : "";
+      return `<details class="af-plan" data-model-plan-details="${r.id}" ${state.openModelPlans.has(r.id) ? "open" : ""}><summary><strong>${esc(m[0])}</strong><span>${requestValid(r, c) ? c.need + " GB · " + plans.length + T(" 个独立方案", " standalone plans") : T("请调整参数", "Adjust inputs")}</span></summary><div class="af-plan-body"><details class="af-inline-detail"><summary>${T("完整参数与显存拆解", "Full parameters & memory breakdown")}</summary>${modelDetail(m, "model", c)}</details>${dataTable([T("独立设备方案", "Standalone hardware"), T("显存 / 剩余", "VRAM / unused"), T("部署条件", "Conditions")], plans.slice((page - 1) * 5, page * 5).map((p) => `<tr><td>${esc(devName(p[0]))}</td><td>${p[1]} / ${p[1] - c.need} GB</td><td>${planMode(p) + (p[9]?.includes("支持 AI Fusion 2.0") ? " · AI Fusion 2.0" : "")}</td></tr>`).join(""))}${pager}${!plans.length && requestValid(r, c) ? `<p class="af-notice">${T("当前没有容量满足的单台设备，可调整量化、上下文或并发。", "No single machine fits. Adjust quantization, context or concurrency.")}</p>` : ""}</div></details>`;
     })
     .join("")}`;
 }
 function modelPage() {
-  const head = `<div class="af-workhead"><div><h2>${T("模型找硬件", "Model → hardware")}</h2><p class="af-subtitle">${T("多个模型同时部署，寻找能容纳它们的硬件组合。", "Deploy multiple models together and find hardware combinations that fit.")}</p></div><button type="button" data-model-tab="config">${T("编辑模型与参数", "Edit models & parameters")}</button></div><div class="af-condition"><strong>${state.requests.length} ${T("个模型", "models")}</strong><span>${state.requests.map((r) => esc(catalog.M[+r.id][0])).join(" · ")}</span></div>`;
+  const head = `<div class="af-workhead"><div><h2>${T("模型找硬件", "Model → hardware")}</h2><p class="af-subtitle">${T("选择模型，逐项查看单台硬件的容量匹配结果。", "Select models and review single-machine capacity matches for each.")}</p></div><button type="button" data-model-tab="config">${T("编辑模型与参数", "Edit models & parameters")}</button></div><div class="af-condition"><strong>${state.requests.length} ${T("个模型", "models")}</strong><span>${state.requests.map((r) => esc(catalog.M[+r.id][0])).join(" · ")}</span></div>`;
   if (state.modelTab === "config")
     return (
       head +
-      `<div class="af-configtop"><button type="button" class="af-rowbtn" data-model-tab="results">← ${T("返回结果", "Back to results")}</button></div><section class="af-group"><h3>${T("模型清单与独立运行参数", "Models & individual workloads")}</h3>${picker("model")}${requestEditor(state.requests, "model")}<div class="af-fields">${field("util")}</div></section><button type="button" class="af-primary" data-model-tab="results">${T("寻找硬件组合", "Find hardware combinations")}</button>`
+      `<div class="af-configtop"><button type="button" class="af-rowbtn" data-model-tab="results">← ${T("返回结果", "Back to results")}</button></div><section class="af-group"><h3>${T("模型清单与独立运行参数", "Models & individual workloads")}</h3>${picker("model")}${requestEditor(state.requests, "model")}<div class="af-fields">${field("util")}</div></section><button type="button" class="af-primary" data-model-tab="results">${T("查看单机方案", "View single-machine options")}</button>`
     );
-  return (
-    head +
-    `<div class="af-configgroups"><button type="button" data-combo-mode="deploy" aria-pressed="${state.comboMode === "deploy"}">${T("同时部署 · 组合方案", "Deploy together · combinations")}</button><button type="button" data-combo-mode="compare" aria-pressed="${state.comboMode === "compare"}">${T("逐项比较", "Individual comparison")}</button></div>` +
-    (state.comboMode === "deploy"
-      ? placementResults(state.requests)
-      : individualResults())
-  );
+  return head + individualResults();
 }
 
 function libraryModels() {
@@ -690,7 +586,7 @@ function libraryModels() {
             .map((q) => q[0])
             .join(
               " / ",
-            )}</td><td>${!Number.isFinite(m[2]) ? "" : m[2].toLocaleString() + "<small>" + (fusion(m) ? "Fusion KV" : "Q8 KV") + "</small>"}</td><td>${detailButton("m" + i)}</td></tr>` +
+            )}</td><td>${!Number.isFinite(m[2]) ? "" : m[2].toLocaleString() + "<small>" + (fusion(m) ? "AI Fusion 2.0 KV" : "Q8 KV") + "</small>"}</td><td>${detailButton("m" + i)}</td></tr>` +
           detailRow("m" + i, 6, modelDetail(m)),
       )
       .join(""),
@@ -700,6 +596,7 @@ function libraryModels() {
 function libraryDevices(performance = false) {
   let rows = catalog.H.map((h, i) => ({ h, i })).filter(
     ({ h }) =>
+      (!performance || speed(h) || h[2] !== null) &&
       (state.family === "all" || h[0].split(" · ")[0] === state.family) &&
       h[0].toLowerCase().includes(state.search.toLowerCase()) &&
       (state.filter === "all" ||
@@ -717,7 +614,7 @@ function libraryDevices(performance = false) {
     Math.min(state.catalogPage, Math.max(1, Math.ceil(totalRows / 8))),
   );
   rows = rows.slice((state.catalogPage - 1) * 8, state.catalogPage * 8);
-  return `<h2>${performance ? T("性能资料库", "Performance library") : T("设备库", "Device library")} <span class="af-mark">${catalog.H.length}</span></h2><p class="af-subtitle">${performance ? T("指定模型的上游实测记录与设备方向性估算分别展示。", "Named-model measurements and directional device estimates from the source catalog.") : T(catalog.H.length + " 条设备配置，来自原始设备目录。", catalog.H.length + " device configurations from the original catalog.")}</p>${toolbar(performance ? "performance" : "devices")}<p class="af-meta">${T("显示", "Showing")} ${totalRows}/${catalog.H.length}</p>${dataTable(
+  return `<h2>${performance ? T("性能资料库", "Performance library") : T("设备库", "Device library")} <span class="af-mark">${catalog.H.length}</span></h2><p class="af-subtitle">${performance ? T("指定模型的上游实测记录与设备方向性估算分别展示。", "Named-model measurements and directional device estimates from the source catalog.") : T(catalog.H.length + " 条设备配置，包含原始目录与已确认新增设备。", catalog.H.length + " device configurations from the source catalog and confirmed additions.")}</p>${toolbar(performance ? "performance" : "devices")}<p class="af-meta">${T("显示", "Showing")} ${totalRows}/${catalog.H.length}</p>${dataTable(
     performance
       ? [
           T("设备配置", "Device configuration"),
@@ -832,6 +729,7 @@ function metadataPage() {
     ) +
     " · " +
     link("../data/manifest.json", T("数据包清单", "Pack manifest")) +
+    " · " + link("./device-additions.json", T("新增设备与规则来源", "Device additions & rule sources")) +
     " · " +
     esc(packManifest.dataVersion) +
     "</p>";
@@ -984,15 +882,18 @@ function navButton(p) {
 root.addEventListener(
   "toggle",
   (event) => {
-    if (event.target.id === "af-allocation-inputs")
-      state.editAllocation = event.target.open;
+    const id = event.target.dataset?.modelPlanDetails;
+    if (id !== undefined) {
+      if (event.target.open) state.openModelPlans.add(id);
+      else state.openModelPlans.delete(id);
+    }
   },
   true,
 );
 root.addEventListener("change", (event) => {
   const target = event.target,
     d = target.dataset;
-  if (d.request !== undefined || d.fleetCount !== undefined) {
+  if (d.request !== undefined) {
     if (target.type === "number" && !target.checkValidity()) {
       target.reportValidity();
       return;
@@ -1003,9 +904,6 @@ root.addEventListener("change", (event) => {
       const r = list.find((r) => r.id === d.request);
       if (r && ["bits", "context", "concurrency"].includes(d.param))
         r[d.param] = +target.value;
-    } else {
-      const f = state.fleet.find((f) => f.id === d.fleetCount);
-      if (f) f.count = +target.value;
     }
     state.resultPage = 1;
     state.planPage = 1;
@@ -1066,13 +964,16 @@ root.addEventListener("click", (event) => {
   if (b.dataset.retryPack) {
     packCache.delete(packId);
     loadPack(packId);
-  } else if (b.dataset.add) {
+  } else if (b.dataset.modelPlan !== undefined) {
+    state.modelPlanPages[b.dataset.modelPlan] = Math.max(1, Number(b.dataset.pageNumber));
+    state.openModelPlans.add(b.dataset.modelPlan);
+  } else if (b.dataset.add === "model") {
     const kind = b.dataset.add;
     const id = root.querySelector("#af-add-" + kind).value;
-    const list = kind === "model" ? state.requests : state.fleet;
+    const list = state.requests;
     const record = (kind === "model" ? catalog.M : catalog.H)[+id];
     if (record && !list.some((r) => r.id === id))
-      list.push(kind === "model" ? newRequest(id) : { id, count: 1 });
+      list.push(newRequest(id));
     state.planPage = 1;
   } else if (b.dataset.removeModel !== undefined) {
     const scope = b.dataset.scope === "model" ? "requests" : "hardwareRequests";
@@ -1081,12 +982,6 @@ root.addEventListener("click", (event) => {
     if (scope === "hardwareRequests")
       state.selected = state.hardwareRequests.map((r) => +r.id);
     state.planPage = 1;
-  } else if (b.dataset.removeDevice !== undefined) {
-    if (state.fleet.length > 1)
-      state.fleet = state.fleet.filter((f) => f.id !== b.dataset.removeDevice);
-    state.resultPage = 1;
-  } else if (b.dataset.comboMode) {
-    state.comboMode = b.dataset.comboMode;
   } else if (b.dataset.catalogTurn) {
     state.catalogPage += Number(b.dataset.catalogTurn);
     state.expanded = null;
@@ -1095,7 +990,7 @@ root.addEventListener("click", (event) => {
   } else if (b.dataset.planTurn) {
     state.planPage += Number(b.dataset.planTurn);
   } else if (b.dataset.work) {
-    state.workTab = b.dataset.work;
+    state.workTab = ["config", "results", "compare", "detail"].includes(b.dataset.work) ? b.dataset.work : "results";
   } else if (b.dataset.resultGroup) {
     state.resultGroup = b.dataset.resultGroup;
     state.resultPage = 1;
@@ -1191,7 +1086,7 @@ function resultSet() {
 }
 function workspaceHeader() {
   const v = state.values;
-  return `<div class="af-workhead"><div><h2>${T("硬件找模型", "Hardware → models")}</h2><p class="af-subtitle">${T("添加多种设备，勾选多个模型，再评估同时部署。", "Add hardware types, select models, then assess simultaneous placement.")}</p></div><button type="button" data-work="config">${T("编辑硬件与参数", "Edit hardware & inputs")}</button></div><div class="af-condition"><strong>${state.fleet.length} ${T("种设备", "hardware types")} · ${state.fleet.reduce((n, f) => n + f.count, 0)} ${T("台", "machines")}</strong><span>${state.fleet.map((f) => esc(devName(catalog.H[+f.id][0])) + " × " + f.count).join(" · ")}</span><span>${v.quant}-bit · ${v.context}K · ${v.concurrency} ${T("并发；按单机容量筛选", "concurrent; filter by per-machine capacity")}</span></div>`;
+  return `<div class="af-workhead"><div><h2>${T("硬件找模型", "Hardware → models")}</h2><p class="af-subtitle">${T("选择一台设备，筛选可容纳的模型并对比参数。", "Select one machine, find capacity-matched models and compare parameters.")}</p></div><button type="button" data-work="config">${T("编辑硬件与参数", "Edit hardware & inputs")}</button></div><div class="af-condition"><strong>${T("单台设备", "Single machine")}</strong><span>${esc(devName(catalog.H[+v.device][0]))}</span><span>${v.quant}-bit · ${v.context}K · ${v.concurrency} ${T("并发；按单机容量筛选", "concurrent; filter by per-machine capacity")}</span></div>`;
 }
 function resultPager(total, pageCount) {
   return `<div class="af-pagebar"><span role="status">${total ? `${(state.resultPage - 1) * 5 + 1}–${Math.min(state.resultPage * 5, total)}` : "0"} / ${total} ${T("条 · 每页 5 条", "records · 5 per page")}</span><div><button type="button" data-turn="-1" class="cursor-interaction" ${state.resultPage === 1 ? "disabled" : ""}>${T("上一页", "Previous")}</button><span>${state.resultPage} / ${pageCount}</span><button type="button" data-turn="1" class="cursor-interaction" ${state.resultPage === pageCount ? "disabled" : ""}>${T("下一页", "Next")}</button></div></div>`;
@@ -1244,26 +1139,20 @@ function resultsView() {
     )
     .join(
       "",
-    )}</select></label><button id="af-result-apply" type="button" class="cursor-interaction">${T("应用", "Apply")}</button></div><p class="af-sort-note">${sorting} ${T("容量估算不代表速度或运行时兼容性保证。", "Capacity estimates do not guarantee speed or runtime compatibility.")}</p><div class="af-short-table">${dataTable([T("模型 / 部署变体", "Model / deployment variant"), T("建议显存", "Required VRAM"), T("评估状态", "Assessment"), T("微调", "Fine-tuning"), T("详情", "Details")], rows, [38, 15, 20, 16, 11])}</div>${resultPager(items.length, pageCount)}<div class="af-comparebar"><span>${state.selected.length ? T("已选 ", "Selected ") + state.selected.length + T(" 个，可跨页选择", "; selections persist across pages") : T("勾选多个模型，评估是否能同时部署", "Select models to assess simultaneous deployment")}</span><button type="button" data-work="allocation" class="af-primary" ${!state.selected.length ? "disabled" : ""}>${T("评估同时部署", "Assess simultaneous deployment")}</button><button type="button" data-work="compare" class="cursor-interaction" ${state.selected.length < 2 || state.selected.length > 3 ? "disabled" : ""}>${T("参数对比（2–3 个）", "Compare parameters (2–3)")} (${state.selected.length})</button></div>`;
+    )}</select></label><button id="af-result-apply" type="button" class="cursor-interaction">${T("应用", "Apply")}</button></div><p class="af-sort-note">${sorting} ${T("容量估算不代表速度或运行时兼容性保证。", "Capacity estimates do not guarantee speed or runtime compatibility.")}</p><div class="af-short-table">${dataTable([T("模型 / 部署变体", "Model / deployment variant"), T("建议显存", "Required VRAM"), T("评估状态", "Assessment"), T("微调", "Fine-tuning"), T("详情", "Details")], rows, [38, 15, 20, 16, 11])}</div>${resultPager(items.length, pageCount)}<div class="af-comparebar"><span>${state.selected.length ? T("已选 ", "Selected ") + state.selected.length + T(" 个，可跨页选择", "; selections persist across pages") : T("勾选 2–3 个模型对比完整参数", "Select 2–3 models to compare full parameters")}</span><button type="button" data-work="compare" class="cursor-interaction" ${state.selected.length < 2 || state.selected.length > 3 ? "disabled" : ""}>${T("参数对比（2–3 个）", "Compare parameters (2–3)")} (${state.selected.length})</button></div>`;
 }
 function compactConfig() {
-  return `<div class="af-configtop"><button type="button" data-work="results" class="af-rowbtn">← ${T("返回结果", "Back to results")}</button></div><div class="af-configgroups"><button type="button" data-config-group="0" aria-pressed="${state.configGroup === 0}">${T("设备与部署", "Hardware & deployment")}</button><button type="button" data-config-group="1" aria-pressed="${state.configGroup === 1}">${T("模型与工作负载", "Model & workload")}</button></div>${state.configGroup === 0 ? fleetEditor() + group("微调选项", "Fine-tuning option", ["accelerator"]) : group("模型与工作负载", "Model & workload", ["cap", "quant", "context", "concurrency"])}<button type="button" data-work="results" class="af-primary">${T("查看更新后的结果", "View updated results")}</button>`;
+  return `<div class="af-configtop"><button type="button" data-work="results" class="af-rowbtn">← ${T("返回结果", "Back to results")}</button></div><div class="af-configgroups"><button type="button" data-config-group="0" aria-pressed="${state.configGroup === 0}">${T("设备选择", "Hardware selection")}</button><button type="button" data-config-group="1" aria-pressed="${state.configGroup === 1}">${T("模型与工作负载", "Model & workload")}</button></div>${state.configGroup === 0 ? fleetEditor() + group("微调选项", "Fine-tuning option", ["accelerator"]) : group("模型与工作负载", "Model & workload", ["cap", "quant", "context", "concurrency"])}<button type="button" data-work="results" class="af-primary">${T("查看更新后的结果", "View updated results")}</button>`;
 }
 function compactDetail() {
   const i = state.detailModel,
     m = catalog.M[i];
-  return `<div class="af-configtop"><button type="button" data-work="results" class="af-rowbtn cursor-interaction">← ${T("返回第 ", "Back to page ")}${state.resultPage}${T(" 页结果", "")}</button><span>${T("返回后保留分组、排序、页码和对比选择", "Preserves grouping, sort, page and comparison selection")}</span></div><h3 class="af-detail-title">${esc(m[0])}</h3><div class="af-group af-detail">${modelDetail(m)}</div><div class="af-group af-detail"><h3>${T("当前设备与性能依据", "Current hardware & performance evidence")}</h3><div style="margin-top:12px">${state.fleet.map((f) => deviceDetail(catalog.H[+f.id])).join("<hr>")}</div></div>`;
+  return `<div class="af-configtop"><button type="button" data-work="results" class="af-rowbtn cursor-interaction">← ${T("返回第 ", "Back to page ")}${state.resultPage}${T(" 页结果", "")}</button><span>${T("返回后保留分组、排序、页码和对比选择", "Preserves grouping, sort, page and comparison selection")}</span></div><h3 class="af-detail-title">${esc(m[0])}</h3><div class="af-group af-detail">${modelDetail(m)}</div><div class="af-group af-detail"><h3>${T("当前设备与性能依据", "Current hardware & performance evidence")}</h3><div style="margin-top:12px">${deviceDetail(catalog.H[+state.values.device])}</div></div>`;
 }
 function hardware() {
   const header = workspaceHeader();
   if (state.workTab === "config") return header + compactConfig();
   if (state.workTab === "detail") return header + compactDetail();
-  if (state.workTab === "allocation")
-    return (
-      header +
-      `<div class="af-configtop"><button type="button" data-work="results" class="af-rowbtn">← ${T("返回候选列表", "Back to candidates")}</button></div><details id="af-allocation-inputs" class="af-group" ${state.editAllocation ? "open" : ""}><summary>${T("逐个编辑所选模型的运行参数", "Edit each selected model’s workload")}</summary>${requestEditor(state.hardwareRequests, "hardware")}</details>` +
-      placementResults(state.hardwareRequests, true)
-    );
   if (state.workTab === "compare") {
     state.compare = true;
     return (

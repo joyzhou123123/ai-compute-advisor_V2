@@ -201,6 +201,13 @@ const P = [
         ["1 × TSK-C5 · RTX 5060 Ti 16GB", 16, 14, 1, 1, "单机单卡", null, null, null, "支持 AI Fusion 2.0；Gemma 4 26B 与 35B A3B 实测 60–70 Token/秒"],
         ["1 × TSK-C5 · Radeon RX 9060 XT 16GB", 16, null, 1, 1, "单机单卡", null, null, null, "支持 AI Fusion 2.0；Gemma 4 26B 与 35B A3B 实测约 50 Token/秒"],
       ];
+export const deviceAdditions = {"schemaVersion":1,"lastUpdated":"2026-11-10","source":{"label":"Owner-confirmed device matching rules","methodology":"Use the single-card ThinkCentre X Tower RTX 5060 Ti 16GB capacity and model matching rules, including AI Fusion 2.0. GPU chip specifications are inherited from the same GPU. No device benchmark or directional speed is asserted."},"devices":[{"id":"thinkcentre-neo50t-gen7-5060ti-16gb","name":"ThinkCentre neo50t Gen7 · RTX 5060 Ti 16GB","referenceDevice":"ThinkCentre X Tower · RTX 5060 Ti 16GB","aiFusion2":true,"lastUpdated":"2026-11-10"},{"id":"yangtian-t490ins-5060ti-16gb","name":"YangTian T490INS · RTX 5060 Ti 16GB","referenceDevice":"ThinkCentre X Tower · RTX 5060 Ti 16GB","aiFusion2":true,"lastUpdated":"2026-11-10"}]};
+for (const device of deviceAdditions.devices) {
+  const reference = H.find(h => h[0] === device.referenceDevice);
+  const referencePlan = P.find(p => p[0] === "1 × " + device.referenceDevice && p[3] === 1);
+  H.push([device.name, reference[1], null, [...reference[3]], reference[4]]);
+  P.push(["1 × " + device.name, referencePlan[1], null, 1, referencePlan[4], referencePlan[5], null, null, null, device.aiFusion2 ? "支持 AI Fusion 2.0" : ""]);
+}
 function isMeasuredModel(name) {
         const value = String(name);
         return value.indexOf("Gemma 4 26B") >= 0 || value.indexOf("35B A3B") >= 0;

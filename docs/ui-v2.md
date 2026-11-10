@@ -55,31 +55,11 @@ npm run preview
 
 根入口原本就是独立静态计算器，没有 Full Data Pack 导入按钮；此版本保留这个入口边界，不将未接入的管理操作添加到 UI。
 
-## V2.1 simultaneous placement
+## 2026-11-10 单机选型与设备扩展
 
-- Model → hardware accepts multiple catalog models. Quantization, context and
-  concurrency belong to each selected model. Standard utilization uses the model
-  workspace setting; Fusion retains the original 95% rule.
-- Hardware → models accepts multiple hardware types, each with an integer count
-  (1–999). Candidate filtering is now based on the largest individual machine,
-  not pooled cross-machine VRAM. Models can be selected across result pages for
-  simultaneous placement; their per-model inputs can then be edited. Hardware
-  workloads retain the original 90% utilization (Fusion 95%). Parameter comparison
-  remains a separate 2–3 model view.
-- `src/calculator/combinationPlanner.ts` adds pure placement search on top of the
-  **unchanged** per-model memory calculation. Each model is indivisible and each
-  machine may host several models. Per-model headroom and rounding are retained
-  conservatively. Placement consumes only GPU capacity; runtime compatibility,
-  model throughput, interconnects, host RAM and SSD sufficiency are not certified.
-- The search tries increasing machine counts and then ranks found configurations
-  by unused capacity. It returns up to 30 distinct hardware multisets at the first
-  feasible machine count, with one valid placement per multiset. It is bounded at
-  50,000 search nodes; reaching that limit is explicitly shown and never treated
-  as proof that no feasible plan exists or that the result is globally optimal.
-- Cross-machine sharding is not inferred from added VRAM. The original standalone
-  plans (including the conditional cross-machine plan) remain available under
-  individual comparison. Device and model catalogs remain unchanged.
-- `npm run generate:planner` emits the browser module. `npm run verify:planner`
-  checks it against the TypeScript source and runs before builds.
-- Combination summaries paginate five per page; only the first placement is open
-  by default. Full model and hardware parameters remain available on demand.
+- 新增 `public/ui-v2/device-additions.json`，存放稳定 ID、设备名称、参考设备、AI Fusion 2.0 支持、确认日期和来源。构建脚本使用严格 schema，并检查重复 ID、重复名称和参考设备 / 单机方案是否存在。先校验全部扩展记录，再生成浏览器文件。
+- 上游 22 个模型、26 个设备和 27 个方案的原始文件及哈希基线不变。生成后的目录追加 2 个设备和 2 个单机方案。新设备不会自动继承实测或方向性速度。保留相同 GPU 的芯片规格、容量及用户确认的模型匹配规则。
+- 硬件侧选择单台设备，使用该设备显存筛选模型，保留 2–3 个模型的参数比较。模型侧逐项查看所选模型，独立配置量化、上下文和并发。
+- 单机推荐按剩余显存升序排序，每个模型每页 5 条。只展示机器数为 1 的原始方案，保留单机双卡。跨机方案仍在原始快照中，但不进入选型推荐。
+- 多台部署入口、台数控件及同时放置结果暂停。`src/calculator/combinationPlanner.ts` 及其单元测试保留，UI 不再加载或调用该模块，等待验证后再恢复。
+- 界面完整使用 AI Fusion 命名。微调排除标签按用户要求为“AI Fusion 1.0不支持 / AI Fusion 1.0 unsupported”。AI Fusion 2.0 的容量公式和支持判断不变。
